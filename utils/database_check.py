@@ -2,6 +2,7 @@ import sqlite3
 import os
 from utils.logger import setup_logger
 from utils.error_handler import log_exception
+from utils.database_optimizer import optimize_database  # 引入通用方法
 
 class DatabaseChecker:
     def __init__(self, db_path='game_data.db'):
@@ -23,10 +24,9 @@ class DatabaseChecker:
     @log_exception
     def optimize_database(self):
         self.logger.info("Optimizing database...")
-        with sqlite3.connect(self.db_path) as conn:
-            cursor = conn.cursor()
-            cursor.execute("VACUUM")
-            cursor.execute("ANALYZE")
+        # 调用通用方法
+        import asyncio
+        asyncio.run(optimize_database(self.db_path))
         self.logger.info("Database optimization completed.")
 
     @log_exception

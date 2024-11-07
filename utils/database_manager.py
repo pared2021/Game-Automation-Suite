@@ -1,6 +1,7 @@
 import sqlite3
 import aiosqlite
 from utils.error_handler import log_exception
+from utils.database_optimizer import optimize_database  # 引入通用方法
 
 class DatabaseManager:
     def __init__(self, db_path='game_data.db'):
@@ -54,8 +55,6 @@ class DatabaseManager:
 
     @log_exception
     async def optimize_database(self):
-        async with aiosqlite.connect(self.db_path) as db:
-            await db.execute("VACUUM")
-            await db.execute("ANALYZE")
+        await optimize_database(self.db_path)  # 调用通用方法
 
 database_manager = DatabaseManager()
