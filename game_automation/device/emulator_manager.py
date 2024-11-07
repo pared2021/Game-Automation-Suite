@@ -1,113 +1,143 @@
-import asyncio
+import cv2
+import numpy as np
 import subprocess
-from utils.config_manager import config_manager
+import json
+import os
+import asyncio
 from utils.logger import detailed_logger
-from utils.error_handler import log_exception, DeviceError
+from utils.error_handler import log_exception, GameAutomationError
 
 class EmulatorManager:
     def __init__(self):
         self.logger = detailed_logger
-        self.config = config_manager.get('emulator', {})
-        self.connected_emulator = None
-
+        self.adb_device = None
+        self.screen_width = 0
+        self.screen_height = 0
+        self.emulator_settings = {}
+        
     @log_exception
     async def connect(self):
-        if self.config.get('auto_detect', True):
-            await self.auto_detect_and_connect()
-        else:
-            await self.connect_default()
+        """初始化连接到模拟器"""
+        try:
+            await self.load_emulator_settings()
+            await self.detect_emulators()
+            await self.select_emulator()
+            await self.update_screen_size()
+            self.logger.info(f"Successfully connected to emulator: {self.adb_device}")
+        except Exception as e:
+            raise GameAutomationError(f"Failed to connect to emulator: {str(e)}")
 
-    async def auto_detect_and_connect(self):
-        emulator_types = sorted(self.config.get('types', []), key=lambda x: x['priority'])
-        for emulator in emulator_types:
-            try:
-                self.logger.info(f"Attempting to connect to {emulator['name']} emulator")
-                connection_method = getattr(self, emulator['connection_method'], None)
-                if connection_method:
-                    await connection_method(emulator)
-                    self.connected_emulator = emulator
-                    self.logger.info(f"Successfully connected to {emulator['name']} emulator")
-                    return
-            except Exception as e:
-                self.logger.warning(f"Failed to connect to {emulator['name']} emulator: {str(e)}")
+    @log_exception
+    async def load_emulator_settings(self):
+        """加载模拟器配置"""
+        try:
+            config_path = 'config/emulator_settings.json'
+            if os.path.exists(config_path):
+                with open(config_path, 'r') as f:
+                    self.emulator_settings = json.load(f)
+            else:
+                self.emulator_settings = {"emulators": []}
+        except Exception as e:
+            raise GameAutomationError(f"Error loading emulator settings: {str(e)}")
 
-        raise DeviceError("Failed to connect to any emulator")
+    @log_exception
+    async def detect_emulators(self):
+        """检测连接的模拟器"""
+        try:
+            result = subprocess.run(['adb', 'devices'], capture_output=True, text=True)
+            lines = result.stdout.strip().split('\n')[1:]
+            self.emulator_settings['emulators'] = []
+            for line in lines:
+                if '\t' in line:
+                    serial, status = line.split('\t')
+                    self.emulator_settings['emulators'].append({
+                        "name": f"Emulator_{serial}",
+                        "serial": serial,
+                        "status": status
+                    })
+        except Exception as e:
+            raise GameAutomationError(f"Error detecting emulators: {str(e)}")
 
-    async def connect_default(self):
-        default_type = self.config.get('default_type', 'adb')
-        emulator = next((e for e in self.config.get('types', []) if e['name'] == default_type), None)
-        if not emulator:
-            raise DeviceError(f"Default emulator type '{default_type}' not found in configuration")
+    @log_exception
+    async def select_emulator(self, adb_device=None):
+        """选择要使用的模拟器"""
+        try:
+            if adb_device:
+                emulator = next((e for e in self.emulator_settings['emulators'] 
+                               if e['serial'] == adb_device), None)
+                if emulator:
+                    self.adb_device = adb_device
+                else:
+                    raise GameAutomationError(f"Specified ADB device {adb_device} not found")
+            else:
+                if self.emulator_settings['emulators']:
+                    self.adb_device = self.emulator_settings['emulators'][0]['serial']
+                else:
+                    raise GameAutomationError("No ADB devices detected")
+        except Exception as e:
+            raise GameAutomationError(f"Error selecting emulator: {str(e)}")
 
-        connection_method = getattr(self, emulator['connection_method'], None)
-        if connection_method:
-            await connection_method(emulator)
-            self.connected_emulator = emulator
-        else:
-            raise DeviceError(f"Connection method '{emulator['connection_method']}' not implemented")
+    @log_exception
+    async def update_screen_size(self):
+        """更新屏幕尺寸信息"""
+        try:
+            output = subprocess.check_output(['adb', '-s', self.adb_device, 'shell', 'wm', 'size'])
+            size = output.decode().strip().split(':')[-1].strip().split('x')
+            self.screen_width, self.screen_height = map(int, size)
+        except Exception as e:
+            raise GameAutomationError(f"Error updating screen size: {str(e)}")
 
-    async def adb_connect(self, emulator):
-        devices = await self.get_adb_devices()
-        if not devices:
-            raise DeviceError("No ADB devices found")
-        # Connect to the first available device
-        await self.execute_adb_command(['connect', devices[0]])
+    @log_exception
+    async def capture_screen(self):
+        """捕获屏幕截图"""
+        try:
+            subprocess.run(['adb', '-s', self.adb_device, 'shell', 'screencap', '-p', '/sdcard/screen.png'])
+            subprocess.run(['adb', '-s', self.adb_device, 'pull', '/sdcard/screen.png', 'screen.png'])
+            return cv2.imread('screen.png')
+        except Exception as e:
+            raise GameAutomationError(f"Error capturing screen: {str(e)}")
 
-    async def nox_connect(self, emulator):
-        # Implement Nox-specific connection logic
-        nox_path = emulator.get('path', 'C:/Program Files/Nox/bin/Nox.exe')
-        # Start Nox emulator if not running
-        subprocess.Popen([nox_path])
-        # Wait for Nox to start and connect via ADB
-        await asyncio.sleep(10)
-        await self.adb_connect(emulator)
+    @log_exception
+    async def capture_audio(self):
+        """捕获音频数据"""
+        # TODO: 实现音频捕获功能
+        return None
 
-    async def bluestacks_connect(self, emulator):
-        # Implement BlueStacks-specific connection logic
-        bluestacks_path = emulator.get('path', 'C:/Program Files/BlueStacks/bluestacks.exe')
-        # Start BlueStacks emulator if not running
-        subprocess.Popen([bluestacks_path])
-        # Wait for BlueStacks to start and connect via ADB
-        await asyncio.sleep(10)
-        await self.adb_connect(emulator)
+    @log_exception
+    async def tap(self, x, y):
+        """点击指定坐标"""
+        try:
+            subprocess.run(['adb', '-s', self.adb_device, 'shell', 'input', 'tap', str(x), str(y)])
+        except Exception as e:
+            raise GameAutomationError(f"Error performing tap action: {str(e)}")
 
-    async def get_adb_devices(self):
-        result = await self.execute_adb_command(['devices'])
-        lines = result.strip().split('\n')[1:]
-        return [line.split('\t')[0] for line in lines if line.endswith('device')]
+    @log_exception
+    async def swipe(self, start_x, start_y, end_x, end_y, duration=100):
+        """滑动操作"""
+        try:
+            subprocess.run(['adb', '-s', self.adb_device, 'shell', 'input', 'swipe', 
+                          str(start_x), str(start_y), str(end_x), str(end_y), str(duration)])
+        except Exception as e:
+            raise GameAutomationError(f"Error performing swipe action: {str(e)}")
 
-    async def execute_adb_command(self, command):
-        process = await asyncio.create_subprocess_exec(
-            'adb', *command,
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE
-        )
-        stdout, stderr = await process.communicate()
-        if process.returncode != 0:
-            raise DeviceError(f"ADB command failed: {stderr.decode().strip()}")
-        return stdout.decode().strip()
+    @log_exception
+    async def input_text(self, text):
+        """输入文本"""
+        try:
+            subprocess.run(['adb', '-s', self.adb_device, 'shell', 'input', 'text', text])
+        except Exception as e:
+            raise GameAutomationError(f"Error inputting text: {str(e)}")
 
-    async def disconnect(self):
-        if self.connected_emulator:
-            self.logger.info(f"Disconnecting from {self.connected_emulator['name']} emulator")
-            # Implement disconnection logic here
-            self.connected_emulator = None
+    @log_exception
+    async def get_emulator_info(self):
+        """获取当前模拟器信息"""
+        return next((e for e in self.emulator_settings['emulators'] 
+                    if e['serial'] == self.adb_device), None)
 
-    async def restart_emulator(self):
-        if self.connected_emulator:
-            await self.disconnect()
-            await self.connect()
-        else:
-            raise DeviceError("No emulator is currently connected")
-
-    async def execute_custom_script(self, script_name):
-        script = self.config.get('custom_scripts', {}).get(script_name)
-        if script:
-            # Execute the custom script
-            # This is a placeholder and should be implemented based on your needs
-            self.logger.info(f"Executing custom script: {script_name}")
-            # Example: subprocess.run(script, shell=True)
-        else:
-            raise DeviceError(f"Custom script '{script_name}' not found in configuration")
+    @log_exception
+    async def start_emulator(self):
+        """启动模拟器"""
+        self.logger.info("Starting emulator...")
+        # TODO: 实现启动模拟器的具体逻辑
 
 emulator_manager = EmulatorManager()
