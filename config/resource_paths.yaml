@@ -1,0 +1,4 @@
+task_buttons_path: "assets/task_buttons/"
+items_path: "assets/items/"
+enemies_path: "assets/enemies/"
+task_complete_indicator_path: "assets/task_complete_indicator.png"

@@ -43,3 +43,17 @@ internationalization:
 logging:
   level: 'INFO'
   file: 'game_automation.log'
+
+predefined_tasks:
+  main_quests:
+    - id: 1
+      name: "Test Task"
+      description: "This is a test task."
+      reward: 100
+      prerequisites: []
+      subtasks: []
+  side_quests: []
+  daily_tasks: []
+  weekly_tasks: []
+  monthly_tasks: []
+  events: []

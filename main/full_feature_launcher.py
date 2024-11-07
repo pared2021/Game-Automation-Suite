@@ -6,11 +6,11 @@ import os
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from game_automation.game_engine import GameEngine
-from utils.logger import setup_logger
+from utils.logger import detailed_logger
 from utils.data_handler import DataHandler
 from utils.performance_monitor import performance_monitor
 
-logger = setup_logger()
+logger = detailed_logger
 data_handler = DataHandler()
 
 async def main(config_file, strategy_file):

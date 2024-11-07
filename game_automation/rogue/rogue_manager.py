@@ -43,6 +43,7 @@ class RogueManager:
 
     def end_run(self):
         self.is_running = False
+        self.current_level = 0  # Reset current level to 0
 
     def get_current_state(self):
         return {

@@ -6,7 +6,7 @@ import pandas as pd
 import matplotlib.pyplot as plt
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 from game_automation.game_engine import GameEngine
-from utils.logger import setup_logger
+from utils.logger import detailed_logger
 from utils.data_handler import DataHandler
 
 class GameAutomationGUI:
@@ -15,7 +15,7 @@ class GameAutomationGUI:
         master.title("游戏自动化控制面板")
         master.geometry("800x600")
 
-        self.logger = setup_logger()
+        self.logger = detailed_logger
         self.game_engine = None
         self.data_handler = DataHandler()
         

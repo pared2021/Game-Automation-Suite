@@ -1,13 +1,13 @@
 import sqlite3
 import os
-from utils.logger import setup_logger
+from utils.logger import detailed_logger
 from utils.error_handler import log_exception
 from utils.database_optimizer import optimize_database  # 引入通用方法
 
 class DatabaseChecker:
     def __init__(self, db_path='game_data.db'):
         self.db_path = db_path
-        self.logger = setup_logger()
+        self.logger = detailed_logger
 
     @log_exception
     def run_integrity_check(self):
@@ -48,13 +48,19 @@ class DatabaseChecker:
         self.logger.info("Running basic queries to check data consistency...")
         with sqlite3.connect(self.db_path) as conn:
             cursor = conn.cursor()
-            cursor.execute("SELECT COUNT(*) FROM game_sessions")
-            session_count = cursor.fetchone()[0]
-            self.logger.info(f"Total game sessions: {session_count}")
+            try:
+                cursor.execute("BEGIN TRANSACTION;")
+                cursor.execute("SELECT COUNT(*) FROM game_sessions")
+                session_count = cursor.fetchone()[0]
+                self.logger.info(f"Total game sessions: {session_count}")
 
-            cursor.execute("SELECT AVG(duration) FROM game_sessions")
-            avg_duration = cursor.fetchone()[0]
-            self.logger.info(f"Average session duration: {avg_duration:.2f} seconds")
+                cursor.execute("SELECT AVG(duration) FROM game_sessions")
+                avg_duration = cursor.fetchone()[0]
+                self.logger.info(f"Average session duration: {avg_duration:.2f} seconds")
+                conn.commit()
+            except Exception as e:
+                conn.rollback()
+                self.logger.error(f"Error running basic queries: {e}")
 
     @log_exception
     def check_indexes(self):

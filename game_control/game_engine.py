@@ -11,12 +11,12 @@ from .controllers.touch_controller import TouchController
 from .controllers.auto_battle_strategy import AutoBattleStrategy
 from .ocr_prediction.ocr_utils import OCRUtils
 from .image_recognition import ImageRecognition
-from utils.logger import setup_logger, log_exception
+from utils.logger import detailed_logger, log_exception
 from utils.data_handler import DataHandler
 
 class GameEngine:
     def __init__(self, strategy_file, adb_device=None):
-        self.logger = setup_logger()
+        self.logger = detailed_logger
         try:
             self.adb_device = adb_device
             self.touch_controller = None
