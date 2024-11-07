@@ -4,6 +4,7 @@
       <nav>
         <router-link to="/">{{ $t('general.home') }}</router-link> |
         <router-link to="/about">{{ $t('general.about') }}</router-link> |
+        <router-link to="/game">{{ $t('general.game') }}</router-link> |
         <router-link to="/rogue">{{ $t('general.rogue') }}</router-link>
       </nav>
       <select v-model="$i18n.locale">
@@ -16,7 +17,7 @@
       <router-view/>
     </main>
     <footer>
-      <p>&copy; 2023 Game Automation Project</p>
+      <p>&copy; 2023 Game Automation Suite</p>
     </footer>
   </div>
 </template>
@@ -25,7 +26,7 @@
 export default {
   name: 'App',
   mounted() {
-    // 在组件挂载后获取游戏状态
+    // 初始化时获取游戏状态
     this.$store.dispatch('fetchGameState')
   }
 }
@@ -46,6 +47,7 @@ export default {
 header {
   background-color: #f8f9fa;
   padding: 1rem;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
 }
 
 nav {
@@ -57,6 +59,11 @@ nav a {
   color: #2c3e50;
   text-decoration: none;
   margin: 0 0.5rem;
+  transition: color 0.3s ease;
+}
+
+nav a:hover {
+  color: #42b983;
 }
 
 nav a.router-link-exact-active {
@@ -66,15 +73,21 @@ nav a.router-link-exact-active {
 main {
   flex-grow: 1;
   padding: 2rem;
+  background-color: #ffffff;
 }
 
 footer {
   background-color: #f8f9fa;
   padding: 1rem;
+  box-shadow: 0 -2px 4px rgba(0,0,0,0.1);
 }
 
 select {
   margin-top: 1rem;
+  padding: 0.5rem;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  background-color: white;
 }
 
 @media (max-width: 768px) {
@@ -84,6 +97,14 @@ select {
 
   nav a {
     margin: 0.5rem 0;
+  }
+
+  header {
+    padding: 0.5rem;
+  }
+
+  main {
+    padding: 1rem;
   }
 }
 </style>
