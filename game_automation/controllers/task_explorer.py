@@ -1,6 +1,6 @@
 import asyncio
 import yaml
-from utils.logger import setup_logger
+from utils.logger import detailed_logger
 from utils.error_handler import log_exception
 from game_automation.image_recognition import ImageRecognition
 from game_automation.ocr_prediction.ocr_utils import ocr_utils
@@ -8,7 +8,7 @@ from game_automation.controllers.task_utils import TaskUtils
 
 class TaskExplorer:
     def __init__(self, game_engine, task_manager):
-        self.logger = setup_logger('task_explorer')
+        self.logger = detailed_logger
         self.game_engine = game_engine
         self.task_manager = task_manager
         self.image_recognition = ImageRecognition()

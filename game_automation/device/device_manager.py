@@ -1,13 +1,13 @@
 import subprocess
 import time
 import asyncio
-from utils.logger import setup_logger
+from utils.logger import detailed_logger
 from utils.error_handler import log_exception, DeviceError
 from utils.config_manager import config_manager
 
 class DeviceManager:
     def __init__(self):
-        self.logger = setup_logger('device_manager')
+        self.logger = detailed_logger
         self.adb_path = self._get_adb_path()
         self.connected = False
         self.device_id = None
