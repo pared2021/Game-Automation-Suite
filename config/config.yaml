@@ -1,0 +1,45 @@
+game_engine:
+  loop_interval: 0.1
+  max_errors: 5
+  max_recovery_attempts: 3
+
+scene_understanding:
+  yolo_model_path: 'models/yolov5s.pt'
+  confidence_threshold: 0.5
+  dynamic_object_expiry: 100
+  max_history_length: 100
+
+ai_settings:
+  learning_rate: 0.001
+  discount_factor: 0.99
+  epsilon: 0.1
+  epsilon_decay: 0.995
+  min_epsilon: 0.01
+  batch_size: 32
+  memory_size: 10000
+
+multimodal_analysis:
+  image_model: 'models/image_model.pth'
+  text_model: 'models/text_model.pth'
+  audio_model: 'models/audio_model.pth'
+  fusion_model: 'models/fusion_model.pth'
+
+performance:
+  cpu_threshold: 80
+  memory_threshold: 80
+  optimization_interval: 300
+
+security:
+  encryption_key: 'your_secret_key_here'
+
+plugins:
+  enabled: true
+  plugin_dir: 'plugins'
+
+internationalization:
+  default_language: 'en-US'
+  available_languages: ['en-US', 'zh-CN', 'ja-JP']
+
+logging:
+  level: 'INFO'
+  file: 'game_automation.log'
