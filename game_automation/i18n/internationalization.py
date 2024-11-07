@@ -1,11 +1,11 @@
 import json
 import os
-from utils.logger import setup_logger
+from utils.logger import detailed_logger
 from utils.config_manager import config_manager
 
 class Internationalization:
     def __init__(self):
-        self.logger = setup_logger('internationalization')
+        self.logger = detailed_logger
         self.config = config_manager.get('i18n', {})
         self.current_language = self.config.get('default_language', 'en')
         self.translations = {}

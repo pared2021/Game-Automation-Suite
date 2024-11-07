@@ -1,11 +1,11 @@
 import networkx as nx
 from pyDatalog import pyDatalog
-from utils.logger import setup_logger
+from utils.logger import detailed_logger
 from utils.config_manager import config_manager
 
 class InferenceEngine:
     def __init__(self):
-        self.logger = setup_logger('inference_engine')
+        self.logger = detailed_logger
         self.config = config_manager.get('reasoning', {})
         self.knowledge_graph = nx.DiGraph()
         pyDatalog.create_terms('X, Y, Z, relation, infer')

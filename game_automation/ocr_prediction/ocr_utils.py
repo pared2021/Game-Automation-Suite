@@ -3,14 +3,14 @@ import numpy as np
 from paddleocr import PaddleOCR
 from utils.config_manager import config_manager
 from utils.error_handler import log_exception
-from utils.logger import setup_logger
+from utils.logger import detailed_logger
 import enchant
 import re
 from collections import defaultdict
 
 class OCRUtils:
     def __init__(self):
-        self.logger = setup_logger('ocr_utils')
+        self.logger = detailed_logger
         self.ocr = PaddleOCR(use_angle_cls=True, lang='ch')
         self.config = config_manager.get('ocr', {})
         self.confidence_threshold = self.config.get('confidence_threshold', 0.7)

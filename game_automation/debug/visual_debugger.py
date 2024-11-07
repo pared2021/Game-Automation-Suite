@@ -1,11 +1,11 @@
 import pygame
 import asyncio
-from utils.logger import setup_logger
+from utils.logger import detailed_logger
 from utils.config_manager import config_manager
 
 class VisualDebugger:
     def __init__(self, game_engine):
-        self.logger = setup_logger('visual_debugger')
+        self.logger = detailed_logger
         self.config = config_manager.get('debug', {})
         self.game_engine = game_engine
         self.screen = None

@@ -1,11 +1,11 @@
 import random
 import asyncio
-from utils.logger import setup_logger
+from utils.logger import detailed_logger
 from game_automation.game_engine import GameEngine
 
 class TestGenerator:
     def __init__(self):
-        self.logger = setup_logger('test_generator')
+        self.logger = detailed_logger
         self.game_engine = GameEngine()
 
     def generate_test_scenario(self):

@@ -4,12 +4,12 @@ import torch
 import torchvision.transforms as transforms
 from torchvision.models import resnet50
 from PIL import Image
-from utils.logger import setup_logger
+from utils.logger import detailed_logger
 from utils.config_manager import config_manager
 
 class EnhancedImageRecognition:
     def __init__(self):
-        self.logger = setup_logger('enhanced_image_recognition')
+        self.logger = detailed_logger
         self.config = config_manager.get('image_recognition', {})
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         

@@ -2,11 +2,11 @@ import random
 import asyncio
 from game_automation.game_engine import GameEngine
 from game_automation.ai.meta_learning import meta_learning_manager
-from utils.logger import setup_logger
+from utils.logger import detailed_logger
 
 class AdvancedTestGenerator:
     def __init__(self):
-        self.logger = setup_logger('advanced_test_generator')
+        self.logger = detailed_logger
         self.game_engine = GameEngine()
         self.test_scenarios = []
 

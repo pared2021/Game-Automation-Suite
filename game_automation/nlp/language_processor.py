@@ -1,12 +1,12 @@
 import spacy
 import nltk
 from transformers import pipeline
-from utils.logger import setup_logger
+from utils.logger import detailed_logger
 from utils.config_manager import config_manager
 
 class LanguageProcessor:
     def __init__(self):
-        self.logger = setup_logger('language_processor')
+        self.logger = detailed_logger
         self.config = config_manager.get('nlp', {})
         
         # 加载spaCy模型

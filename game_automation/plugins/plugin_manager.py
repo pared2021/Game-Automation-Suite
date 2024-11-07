@@ -1,10 +1,10 @@
 import importlib
 import os
-from utils.logger import setup_logger
+from utils.logger import detailed_logger
 
 class PluginManager:
     def __init__(self):
-        self.logger = setup_logger('plugin_manager')
+        self.logger = detailed_logger
         self.plugins = {}
 
     def load_plugins(self):

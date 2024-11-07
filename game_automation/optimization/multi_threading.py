@@ -1,10 +1,10 @@
 import threading
 import queue
-from utils.logger import setup_logger
+from utils.logger import detailed_logger
 
 class ThreadPool:
     def __init__(self, num_threads):
-        self.logger = setup_logger('thread_pool')
+        self.logger = detailed_logger
         self.num_threads = num_threads
         self.task_queue = queue.Queue()
         self.threads = []

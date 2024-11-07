@@ -1,9 +1,9 @@
-from utils.logger import setup_logger
+from utils.logger import detailed_logger
 from utils.config_manager import config_manager
 
 class GameTypeManager:
     def __init__(self):
-        self.logger = setup_logger('game_type_manager')
+        self.logger = detailed_logger
         self.config = config_manager.get('game_types', {})
         self.current_game_type = None
         self.game_types = {

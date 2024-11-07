@@ -1,12 +1,12 @@
 import asyncio
 import subprocess
 from utils.config_manager import config_manager
-from utils.logger import setup_logger
+from utils.logger import detailed_logger
 from utils.error_handler import log_exception, DeviceError
 
 class EmulatorManager:
     def __init__(self):
-        self.logger = setup_logger('emulator_manager')
+        self.logger = detailed_logger
         self.config = config_manager.get('emulator', {})
         self.connected_emulator = None
 

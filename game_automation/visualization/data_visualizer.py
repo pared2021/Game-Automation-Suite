@@ -1,9 +1,9 @@
 import matplotlib.pyplot as plt
-from utils.logger import setup_logger
+from utils.logger import detailed_logger
 
 class DataVisualizer:
     def __init__(self):
-        self.logger = setup_logger('data_visualizer')
+        self.logger = detailed_logger
 
     def plot_performance_over_time(self, performance_data):
         plt.figure(figsize=(10, 6))

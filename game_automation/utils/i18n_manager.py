@@ -2,14 +2,14 @@ import json
 import os
 from typing import Dict, Any
 from utils.error_handler import log_exception
-from utils.logger import setup_logger
+from utils.logger import detailed_logger
 
 class I18nManager:
     def __init__(self, default_language: str = 'en-US'):
         self.default_language = default_language
         self.current_language = default_language
         self.translations: Dict[str, Dict[str, Any]] = {}
-        self.logger = setup_logger()
+        self.logger = detailed_logger
         self.load_translations()
 
     @log_exception

@@ -1,9 +1,9 @@
-from utils.logger import setup_logger
+from utils.logger import detailed_logger
 from utils.config_manager import config_manager
 
 class AdaptiveDifficulty:
     def __init__(self):
-        self.logger = setup_logger('adaptive_difficulty')
+        self.logger = detailed_logger
         self.config = config_manager.get('difficulty', {})
         self.current_difficulty = 1.0
         self.player_performance = []
