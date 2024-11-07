@@ -1,5 +1,6 @@
 import statistics
 import aiosqlite
+from utils.session_utils import save_game_session, get_session_stats  # 引入通用方法
 
 class DataHandler:
     def __init__(self, db_path='game_data.db'):
@@ -22,34 +23,12 @@ class DataHandler:
             await db.commit()
 
     async def save_game_session(self, start_time, end_time, duration, player_level, gold_earned):
-        # 保存游戏会话数据
-        async with aiosqlite.connect(self.db_path) as db:
-            await db.execute('''
-                INSERT INTO game_sessions (start_time, end_time, duration, player_level, gold_earned)
-                VALUES (?, ?, ?, ?, ?)
-            ''', (start_time, end_time, duration, player_level, gold_earned))
-            await db.commit()
+        # 使用通用方法保存游戏会话数据
+        await save_game_session(self.db_path, start_time, end_time, duration, player_level, gold_earned)
 
     async def get_session_stats(self, start_date=None, end_date=None):
-        # 获取会话统计数据
-        query = '''
-            SELECT DATE(start_time) as date, COUNT(*) as session_count, 
-                   AVG(duration) as avg_duration, AVG(player_level) as avg_level, 
-                   SUM(gold_earned) as total_gold
-            FROM game_sessions
-        '''
-        params = []
-        if start_date:
-            query += ' WHERE start_time >= ?'
-            params.append(start_date)
-        if end_date:
-            query += ' AND start_time <= ?' if start_date else ' WHERE start_time <= ?'
-            params.append(end_date)
-        query += ' GROUP BY DATE(start_time)'
-
-        async with aiosqlite.connect(self.db_path) as db:
-            async with db.execute(query, params) as cursor:
-                return await cursor.fetchall()
+        # 使用通用方法获取会话统计数据
+        return await get_session_stats(self.db_path, start_date, end_date)
 
     async def calculate_average_reward(self):
         # 计算平均奖励

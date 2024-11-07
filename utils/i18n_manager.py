@@ -2,12 +2,14 @@ import json
 import os
 import yaml
 from utils.error_handler import log_exception
+from utils.logger import detailed_logger
 
 class I18nManager:
     def __init__(self, default_language='en'):
         self.default_language = default_language
         self.current_language = default_language
         self.translations = {}
+        self.logger = detailed_logger
         self.load_translations()
 
     @log_exception
@@ -30,17 +32,25 @@ class I18nManager:
         if language in self.translations:
             self.current_language = language
         else:
-            raise ValueError(f"Unsupported language: {language}")
+            self.logger.warning(f"Unsupported language: {language}. Falling back to default.")
+            self.current_language = self.default_language
 
     @log_exception
     def get(self, key, **kwargs):
         # 获取翻译
-        translation = self.translations.get(self.current_language, {})
-        for part in key.split('.'):
-            translation = translation.get(part, {})
-        if isinstance(translation, str):
-            return translation.format(**kwargs)
-        return key
+        try:
+            translation = self.translations.get(self.current_language, {})
+            for part in key.split('.'):
+                translation = translation.get(part, {})
+            if isinstance(translation, str):
+                return translation.format(**kwargs)
+            return key
+        except KeyError:
+            self.logger.warning(f"Translation key not found: {key}")
+            return key
+        except Exception as e:
+            self.logger.error(f"Error getting translation for key {key}: {str(e)}")
+            return key
 
     @log_exception
     def add_language(self, language, translations):
