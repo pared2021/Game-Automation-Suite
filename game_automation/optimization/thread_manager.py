@@ -26,8 +26,11 @@ class ThreadPool:
             try:
                 with self.lock:  # 确保任务执行时的并发控制
                     task(*args, **kwargs)
+            except (ValueError, TypeError) as e:
+                self.logger.error(f"Specific error in thread: {str(e)}")
+                # 可以在这里添加重试机制
             except Exception as e:
-                self.logger.error(f"Error in thread: {str(e)}")
+                self.logger.error(f"Unexpected error in thread: {str(e)}")
             finally:
                 self.task_queue.task_done()
 

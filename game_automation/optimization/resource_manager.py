@@ -38,8 +38,11 @@ class DynamicResourceAllocator:
     async def execute_task(self, task, *args):
         try:
             return await asyncio.get_event_loop().run_in_executor(self.thread_pool, task, *args)
+        except (ValueError, TypeError) as e:
+            self.logger.error(f"Specific error executing task {task.__name__}: {str(e)}")
+            # 可以在这里添加重试机制
         except Exception as e:
-            self.logger.error(f"Error executing task {task.__name__}: {str(e)}")
+            self.logger.error(f"Unexpected error executing task {task.__name__}: {str(e)}")
             # 这里可以添加错误恢复逻辑
 
     async def add_task(self, task, *args):
@@ -52,8 +55,10 @@ class DynamicResourceAllocator:
                 result = await self.execute_task(task, *args)
                 self.logger.info(f"Task completed: {task.__name__}")
                 # 这里可以处理任务结果
+            except (ValueError, TypeError) as e:
+                self.logger.error(f"Specific error executing task {task.__name__}: {str(e)}")
             except Exception as e:
-                self.logger.error(f"Error executing task {task.__name__}: {str(e)}")
+                self.logger.error(f"Unexpected error executing task {task.__name__}: {str(e)}")
             finally:
                 self.task_queue.task_done()
 
