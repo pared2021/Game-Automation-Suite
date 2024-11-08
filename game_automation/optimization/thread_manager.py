@@ -28,9 +28,15 @@ class ThreadPool:
                     task(*args, **kwargs)
             except (ValueError, TypeError) as e:
                 self.logger.error(f"Specific error in thread: {str(e)}")
-                # 可以在这里添加重试机制
+                # 添加重试机制
+                if 'retry' in kwargs and kwargs['retry'] > 0:
+                    kwargs['retry'] -= 1
+                    self.task_queue.put((task, args, kwargs))  # 重新添加任务
             except Exception as e:
                 self.logger.error(f"Unexpected error in thread: {str(e)}")
+                # 传播错误信息
+                if 'error_callback' in kwargs:
+                    kwargs['error_callback'](e)
             finally:
                 self.task_queue.task_done()
 

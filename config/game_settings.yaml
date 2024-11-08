@@ -60,6 +60,8 @@ performance:
   monitoring_interval: 5
   log_interval: 100
   plot_interval: 500
+  cpu_threshold: 80  # 新增
+  memory_threshold: 80  # 新增
 
 # Logging Settings
 logging:

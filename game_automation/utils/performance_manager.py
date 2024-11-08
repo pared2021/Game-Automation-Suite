@@ -6,6 +6,7 @@ import threading
 from collections import deque
 import matplotlib.pyplot as plt
 from utils.error_handler import log_exception
+import logging  # 添加 logging 模块
 from utils.logger import detailed_logger
 from utils.config_manager import config_manager
 
@@ -25,12 +26,17 @@ class PerformanceManager:
         }
         self.last_network_io = psutil.net_io_counters()
         self.last_time = time.time()
-        self.logger = detailed_logger
+        self.logger = logging.getLogger("game_automation")  # 确保 logger 是有效的
         self.config = config_manager.get('performance', {})
         self.image_processing_frequency = self.config.get('image_processing_frequency', 1)
         self.image_processing_quality = self.config.get('image_processing_quality', 'medium')
         self.ai_update_frequency = self.config.get('ai_update_frequency', 1)
         self.background_tasks_limit = self.config.get('background_tasks_limit', 5)
+
+        # 设置阈值
+        self.cpu_threshold = 80  # CPU 使用率阈值
+        self.memory_threshold = 80  # 内存使用率阈值
+        self.response_time_threshold = 200  # 响应时间阈值（毫秒）
 
     def start(self):
         self.running = True
@@ -53,7 +59,35 @@ class PerformanceManager:
             self.last_network_io = network_io
             self.last_time = current_time
 
+            self.persist_stats()  # 持久化性能数据
+            self.check_alerts()  # 检查告警
+
             time.sleep(self.interval)
+
+    def persist_stats(self):
+        stats_to_persist = self.get_stats()
+        file_path = 'performance_data.json'
+        if os.path.exists(file_path):
+            with open(file_path, 'r') as f:
+                all_data = json.load(f)
+        else:
+            all_data = []
+
+        all_data.append(stats_to_persist)
+        with open(file_path, 'w') as f:
+            json.dump(all_data, f)
+
+    def check_alerts(self):
+        cpu_usage = self.stats['cpu_percent'][-1] if self.stats['cpu_percent'] else 0
+        memory_usage = self.stats['memory_percent'][-1] if self.stats['memory_percent'] else 0
+        response_time = self.stats['response_time'][-1] if self.stats['response_time'] else 0
+
+        if cpu_usage > self.cpu_threshold:
+            self.logger.warning(f"CPU usage exceeded threshold: {cpu_usage}%")
+        if memory_usage > self.memory_threshold:
+            self.logger.warning(f"Memory usage exceeded threshold: {memory_usage}%")
+        if response_time > self.response_time_threshold:
+            self.logger.warning(f"Response time exceeded threshold: {response_time}ms")
 
     def get_stats(self):
         return {

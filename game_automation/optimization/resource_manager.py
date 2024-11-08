@@ -1,17 +1,18 @@
 import psutil
 import asyncio
-from concurrent.futures import ThreadPoolExecutor
-from utils.logger import setup_logger
+from utils.logger import detailed_logger
+from game_automation.optimization.thread_manager import thread_pool  # 使用自定义的 ThreadPool
 from utils.config_manager import config_manager
 
 class DynamicResourceAllocator:
     def __init__(self):
-        self.logger = setup_logger('dynamic_resource_allocator')
+        self.logger = detailed_logger  # 使用 detailed_logger
         self.config = config_manager.get('performance', {})
         self.cpu_threshold = self.config.get('cpu_threshold', 80)
         self.memory_threshold = self.config.get('memory_threshold', 80)
-        self.thread_pool = ThreadPoolExecutor(max_workers=psutil.cpu_count())
+        self.thread_pool = thread_pool  # 使用自定义的线程池
         self.task_queue = asyncio.Queue()
+        self.lock = asyncio.Lock()  # 添加异步锁机制
 
     async def monitor_resources(self):
         while True:
@@ -24,16 +25,16 @@ class DynamicResourceAllocator:
             await asyncio.sleep(5)  # 每5秒检查一次
 
     async def adjust_resources(self):
-        current_workers = self.thread_pool._max_workers
-        if psutil.cpu_percent() > self.cpu_threshold:
-            new_workers = max(1, current_workers - 1)
-        else:
-            new_workers = min(psutil.cpu_count(), current_workers + 1)
-        
-        if new_workers != current_workers:
-            self.thread_pool.shutdown(wait=True)
-            self.thread_pool = ThreadPoolExecutor(max_workers=new_workers)
-            self.logger.info(f"Adjusted thread pool size to {new_workers}")
+        async with self.lock:  # 确保调整资源时的并发控制
+            current_workers = self.thread_pool.num_threads
+            if psutil.cpu_percent() > self.cpu_threshold:
+                new_workers = max(1, current_workers - 1)
+            else:
+                new_workers = min(psutil.cpu_count(), current_workers + 1)
+            
+            if new_workers != current_workers:
+                self.thread_pool.adjust_pool_size(new_workers)
+                self.logger.info(f"Adjusted thread pool size to {new_workers}")
 
     async def execute_task(self, task, *args):
         try:
@@ -67,9 +68,20 @@ class DynamicResourceAllocator:
         asyncio.create_task(self.process_tasks())
 
     def update_config(self, new_config):
+        # 验证新的配置值
+        cpu_threshold = new_config.get('cpu_threshold', self.cpu_threshold)
+        memory_threshold = new_config.get('memory_threshold', self.memory_threshold)
+
+        if not (0 <= cpu_threshold <= 100):
+            self.logger.error("Invalid CPU threshold value. It must be between 0 and 100.")
+            return
+        if not (0 <= memory_threshold <= 100):
+            self.logger.error("Invalid Memory threshold value. It must be between 0 and 100.")
+            return
+
         self.config.update(new_config)
-        self.cpu_threshold = self.config.get('cpu_threshold', 80)
-        self.memory_threshold = self.config.get('memory_threshold', 80)
+        self.cpu_threshold = cpu_threshold
+        self.memory_threshold = memory_threshold
         self.logger.info("Updated resource allocation configuration.")
 
 class ParallelProcessor:
