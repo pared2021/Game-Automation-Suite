@@ -1,11 +1,14 @@
 import cv2
 import numpy as np
 import torch
+import os
+import pytesseract
 import torchvision.transforms as transforms
 from torchvision.models import resnet50
 from PIL import Image
 from utils.logger import detailed_logger
 from utils.config_manager import config_manager
+from utils.error_handler import GameAutomationError
 
 class EnhancedImageRecognition:
     def __init__(self):
@@ -14,7 +17,7 @@ class EnhancedImageRecognition:
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         
         # 加载预训练的ResNet模型
-        self.model = resnet50(pretrained=True).to(self.device)
+        self.model = resnet50(weights='IMAGENET1K_V1').to(self.device)
         self.model.eval()
         
         self.transform = transforms.Compose([
@@ -25,6 +28,9 @@ class EnhancedImageRecognition:
         ])
 
     async def analyze_scene(self, image):
+        if image is None:
+            raise ValueError("Image cannot be None")
+            
         image = Image.fromarray(cv2.cvtColor(image, cv2.COLOR_BGR2RGB))
         input_tensor = self.transform(image).unsqueeze(0).to(self.device)
         
@@ -36,27 +42,63 @@ class EnhancedImageRecognition:
         indices = indices[:, :5]
         
         # 获取类别名称
-        with open('imagenet_classes.txt') as f:
-            classes = [line.strip() for line in f.readlines()]
+        classes_path = os.path.join(os.path.dirname(__file__), 'resources', 'imagenet_classes.txt')
+        try:
+            with open(classes_path) as f:
+                classes = [line.strip() for line in f.readlines()]
+            
+            # 确保索引在有效范围内
+            valid_indices = [idx.item() for idx in indices[0] if idx.item() < len(classes)]
+            results = [classes[idx] for idx in valid_indices]
+            
+            if not results:  # 如果没有有效结果，返回默认值
+                results = ['unknown']
+                
+        except Exception as e:
+            self.logger.error(f"Error reading classes file: {e}")
+            results = ['unknown']
         
-        results = [classes[idx] for idx in indices[0]]
         self.logger.info(f"Scene analysis results: {results}")
         return results
 
-    async def detect_objects(self, image):
-        # 使用YOLOv5进行对象检测
-        results = self.yolo_model(image)
-        objects = results.pandas().xyxy[0].to_dict(orient="records")
-        self.logger.info(f"Detected objects: {objects}")
-        return objects
-
     async def recognize_text(self, image):
+        if image is None:
+            raise ValueError("Image cannot be None")
+        
         # 使用Tesseract OCR进行文本识别
         text = pytesseract.image_to_string(image)
         self.logger.info(f"Recognized text: {text}")
         return text
 
+    async def detect_objects(self, image):
+        if image is None:
+            raise ValueError("Image cannot be None")
+            
+        # 使用OpenCV的级联分类器进行对象检测
+        objects = []
+        gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+        
+        # 检测常见游戏元素（这里使用简化的示例）
+        contours, _ = cv2.findContours(cv2.threshold(gray, 127, 255, cv2.THRESH_BINARY)[1], 
+                                     cv2.RETR_EXTERNAL, 
+                                     cv2.CHAIN_APPROX_SIMPLE)
+        
+        for contour in contours:
+            x, y, w, h = cv2.boundingRect(contour)
+            if w > 20 and h > 20:  # 过滤掉太小的对象
+                objects.append({
+                    'type': 'unknown',
+                    'confidence': 0.9,
+                    'bbox': (x, y, w, h)
+                })
+        
+        self.logger.info(f"Detected objects: {objects}")
+        return objects
+
     async def analyze_color_scheme(self, image):
+        if image is None:
+            raise ValueError("Image cannot be None")
+            
         # 分析图像的主要颜色方案
         pixels = np.float32(image.reshape(-1, 3))
         n_colors = 5
@@ -69,12 +111,18 @@ class EnhancedImageRecognition:
         return dominant_color.tolist()
 
     async def detect_edges(self, image):
+        if image is None:
+            raise ValueError("Image cannot be None")
+            
         # 使用Canny边缘检测
         edges = cv2.Canny(image, 100, 200)
         self.logger.info("Edge detection completed")
         return edges
 
     async def segment_image(self, image):
+        if image is None:
+            raise ValueError("Image cannot be None")
+            
         # 使用分水岭算法进行图像分割
         gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
         _, thresh = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU)

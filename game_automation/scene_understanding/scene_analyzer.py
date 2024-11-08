@@ -70,6 +70,86 @@ class SceneAnalyzer:
         self.logger.info(f"Scene understanding: {understanding}")
         return understanding
 
+    async def detect_elements(self, image):
+        """检测图像中的元素"""
+        objects = await enhanced_image_recognition.detect_objects(image)
+        return objects
+
+    async def get_valid_actions(self, game_state):
+        """根据游戏状态获取有效的动作"""
+        valid_actions = []
+        # 这里可以根据游戏状态的具体内容来决定有效的动作
+        if game_state['scene_type'] in self.preset_scenes:
+            valid_actions = self.preset_scenes[game_state['scene_type']]['potential_actions']
+        return valid_actions
+
+    async def analyze_game_state(self, game_state):
+        """分析游戏状态并返回相关信息"""
+        # 这里可以根据游戏状态的具体内容进行分析
+        return {
+            'current_scene': game_state['scene_type'],
+            'key_elements': self.preset_scenes[game_state['scene_type']]['key_elements'],
+            'valid_actions': await self.get_valid_actions(game_state)
+        }
+
+    async def detect_scene_changes(self, previous_state, new_state):
+        """检测场景变化"""
+        changes = {
+            'has_changes': False,
+            'new_elements': [],
+            'removed_elements': []
+        }
+        
+        # 检查新旧状态的变化
+        for element in new_state['elements']:
+            if element not in previous_state['elements']:
+                changes['new_elements'].append(element)
+                changes['has_changes'] = True
+        
+        for element in previous_state['elements']:
+            if element not in new_state['elements']:
+                changes['removed_elements'].append(element)
+                changes['has_changes'] = True
+        
+        return changes
+
+    async def assess_risk(self, game_state):
+        """评估当前场景的风险"""
+        risk_level = 0.0
+        # 根据游戏状态评估风险
+        if game_state['scene_type'] == 'battle':
+            risk_level = 1.0  # 高风险
+        return risk_level
+
+    async def calculate_priorities(self, game_state):
+        """计算当前场景的优先级"""
+        priorities = {}
+        # 根据游戏状态计算优先级
+        if game_state['scene_type'] == 'battle':
+            priorities['attack'] = 1
+            priorities['defend'] = 2
+        return priorities
+
+    async def analyze_resources(self, game_state):
+        """分析当前资源状态"""
+        resources = {
+            'health': game_state.get('health', 100),
+            'mana': game_state.get('mana', 100),
+            'inventory': game_state.get('inventory', [])
+        }
+        return resources
+
+    async def recognize_patterns(self, history):
+        """识别历史状态中的模式"""
+        patterns = []
+        # 这里可以实现模式识别的逻辑
+        return patterns
+
+    async def analyze_scene_type(self, image):
+        """分析图像并确定场景类型"""
+        # 这里可以实现图像分析的逻辑
+        return 'unknown'
+
     async def interpret_scene(self, objects, text_analysis):
         scene_type = await self.determine_scene_type(objects, text_analysis)
         interpretation = {
@@ -180,17 +260,5 @@ class SceneAnalyzer:
                 context['quest_related'].append(sentence)
         
         return context
-
-    async def decompose_task(self, task_description):
-        subtasks = await language_processor.analyze_text(task_description)
-        decomposed_tasks = []
-        for verb in subtasks['verbs']:
-            related_nouns = [np for np in subtasks['noun_phrases'] if verb in np]
-            if related_nouns:
-                decomposed_tasks.append(f"{verb} {related_nouns[0]}")
-            else:
-                decomposed_tasks.append(verb)
-        self.logger.info(f"Task decomposition: {decomposed_tasks}")
-        return decomposed_tasks
 
 scene_analyzer = SceneAnalyzer()

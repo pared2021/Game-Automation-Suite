@@ -1,6 +1,4 @@
 import spacy
-import nltk
-from transformers import pipeline
 from utils.logger import detailed_logger
 from utils.config_manager import config_manager
 
@@ -8,49 +6,98 @@ class LanguageProcessor:
     def __init__(self):
         self.logger = detailed_logger
         self.config = config_manager.get('nlp', {})
-        
-        # 加载spaCy模型
         self.nlp = spacy.load("en_core_web_sm")
-        
-        # 初始化NLTK
-        nltk.download('punkt')
-        nltk.download('wordnet')
-        
-        # 加载Hugging Face的文本生成模型
-        self.text_generator = pipeline("text-generation", model="gpt2")
 
     async def analyze_text(self, text):
+        """分析文本并提取关键信息"""
         doc = self.nlp(text)
+        
         analysis = {
-            "entities": [(ent.text, ent.label_) for ent in doc.ents],
-            "noun_phrases": [chunk.text for chunk in doc.noun_chunks],
-            "verbs": [token.lemma_ for token in doc if token.pos_ == "VERB"]
+            'entities': [(ent.text, ent.label_) for ent in doc.ents],
+            'noun_phrases': [chunk.text for chunk in doc.noun_chunks],
+            'verbs': [token.lemma_ for token in doc if token.pos_ == "VERB"],
+            'sentences': [sent.text for sent in doc.sents],
+            'dependencies': [(token.text, token.dep_, token.head.text) for token in doc],
+            'pos_tags': [(token.text, token.pos_) for token in doc]
         }
-        self.logger.info(f"Text analysis results: {analysis}")
+        
+        self.logger.debug(f"Text analysis completed: {analysis}")
         return analysis
 
-    async def generate_response(self, prompt, max_length=50):
-        generated_text = self.text_generator(prompt, max_length=max_length, num_return_sequences=1)[0]['generated_text']
-        self.logger.info(f"Generated response: {generated_text}")
-        return generated_text
-
-    async def extract_keywords(self, text):
+    async def extract_commands(self, text):
+        """提取文本中的命令和动作"""
         doc = self.nlp(text)
-        keywords = [token.text for token in doc if not token.is_stop and token.is_alpha]
-        self.logger.info(f"Extracted keywords: {keywords}")
-        return keywords
+        commands = []
+        
+        for sent in doc.sents:
+            root = [token for token in sent if token.dep_ == "ROOT"][0]
+            if root.pos_ == "VERB":
+                obj = [token for token in root.children if token.dep_ in ["dobj", "pobj"]]
+                if obj:
+                    commands.append(f"{root.lemma_}_{obj[0].lemma_}")
+                else:
+                    commands.append(root.lemma_)
+        
+        return commands
 
-    async def sentiment_analysis(self, text):
+    async def identify_context(self, text):
+        """识别文本的上下文信息"""
         doc = self.nlp(text)
-        sentiment = doc.sentiment
-        self.logger.info(f"Sentiment analysis result: {sentiment}")
-        return sentiment
+        context = {
+            'location': [],
+            'time': [],
+            'objects': [],
+            'actions': []
+        }
+        
+        for ent in doc.ents:
+            if ent.label_ in ["GPE", "LOC"]:
+                context['location'].append(ent.text)
+            elif ent.label_ in ["TIME", "DATE"]:
+                context['time'].append(ent.text)
+        
+        for token in doc:
+            if token.pos_ == "NOUN":
+                context['objects'].append(token.text)
+            elif token.pos_ == "VERB":
+                context['actions'].append(token.lemma_)
+        
+        return context
 
-    async def summarize_text(self, text, sentences=3):
+    async def generate_response(self, text):
+        """生成对文本的响应"""
         doc = self.nlp(text)
-        sentences = list(doc.sents)
-        summary = " ".join([str(sent) for sent in sentences[:sentences]])
-        self.logger.info(f"Text summary: {summary}")
-        return summary
+        
+        # 简单的响应生成逻辑
+        if any(token.text.lower() in ["hello", "hi"] for token in doc):
+            return "Hello! How can I help you?"
+        
+        if "?" in text:
+            return "I'll look into that for you."
+        
+        return "I understand your request."
+
+    async def classify_intent(self, text):
+        """分类文本的意图"""
+        doc = self.nlp(text)
+        
+        intents = {
+            'command': 0,
+            'question': 0,
+            'statement': 0,
+            'request': 0
+        }
+        
+        # 基于语法特征的简单意图分类
+        if text.endswith("?"):
+            intents['question'] = 1
+        elif any(token.dep_ == "ROOT" and token.pos_ == "VERB" for token in doc):
+            intents['command'] = 1
+        elif any(token.text.lower() in ["please", "could", "would"] for token in doc):
+            intents['request'] = 1
+        else:
+            intents['statement'] = 1
+        
+        return max(intents.items(), key=lambda x: x[1])[0]
 
 language_processor = LanguageProcessor()
