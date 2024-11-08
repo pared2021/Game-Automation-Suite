@@ -28,6 +28,7 @@ class EnhancedImageRecognition:
         ])
 
     async def analyze_scene(self, image):
+        """分析场景并返回前5个最可能的类别"""
         if image is None:
             raise ValueError("Image cannot be None")
             
@@ -62,6 +63,7 @@ class EnhancedImageRecognition:
         return results
 
     async def recognize_text(self, image):
+        """使用Tesseract OCR识别图像中的文本"""
         if image is None:
             raise ValueError("Image cannot be None")
         
@@ -71,6 +73,7 @@ class EnhancedImageRecognition:
         return text
 
     async def detect_objects(self, image):
+        """使用OpenCV检测图像中的对象"""
         if image is None:
             raise ValueError("Image cannot be None")
             
@@ -96,6 +99,7 @@ class EnhancedImageRecognition:
         return objects
 
     async def analyze_color_scheme(self, image):
+        """分析图像的主要颜色方案"""
         if image is None:
             raise ValueError("Image cannot be None")
             
@@ -111,6 +115,7 @@ class EnhancedImageRecognition:
         return dominant_color.tolist()
 
     async def detect_edges(self, image):
+        """使用Canny算法进行边缘检测"""
         if image is None:
             raise ValueError("Image cannot be None")
             
@@ -120,6 +125,7 @@ class EnhancedImageRecognition:
         return edges
 
     async def segment_image(self, image):
+        """使用分水岭算法进行图像分割"""
         if image is None:
             raise ValueError("Image cannot be None")
             
