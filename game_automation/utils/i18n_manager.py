@@ -1,6 +1,6 @@
 import json
 import os
-from typing import Dict, Any
+import yaml
 from utils.error_handler import log_exception
 from utils.logger import detailed_logger
 
@@ -8,24 +8,21 @@ class I18nManager:
     def __init__(self, default_language: str = 'en-US'):
         self.default_language = default_language
         self.current_language = default_language
-        self.translations: Dict[str, Dict[str, Any]] = {}
+        self.translations = {}
         self.logger = detailed_logger
         self.load_translations()
 
     @log_exception
-    def load_translations(self) -> None:
+    def load_translations(self):
         i18n_dir = os.path.join(os.path.dirname(__file__), '..', 'config', 'i18n')
         for filename in os.listdir(i18n_dir):
+            file_path = os.path.join(i18n_dir, filename)
             if filename.endswith('.json'):
-                language = filename.split('.')[0]
-                file_path = os.path.join(i18n_dir, filename)
-                try:
-                    with open(file_path, 'r', encoding='utf-8') as f:
-                        self.translations[language] = json.load(f)
-                except json.JSONDecodeError:
-                    self.logger.error(f"Error decoding JSON in file: {file_path}")
-                except IOError:
-                    self.logger.error(f"Error reading file: {file_path}")
+                with open(file_path, 'r', encoding='utf-8') as f:
+                    self.translations[filename.split('.')[0]] = json.load(f)
+            elif filename.endswith('.yaml'):
+                with open(file_path, 'r', encoding='utf-8') as f:
+                    self.translations[filename.split('.')[0]] = yaml.safe_load(f)
 
     @log_exception
     def set_language(self, language: str) -> None:
@@ -50,5 +47,12 @@ class I18nManager:
         except Exception as e:
             self.logger.error(f"Error getting translation for key {key}: {str(e)}")
             return key
+
+    @log_exception
+    def add_language(self, language: str, translations: Dict[str, Any]) -> None:
+        if language not in self.translations:
+            self.translations[language] = translations
+        else:
+            self.translations[language].update(translations)
 
 i18n_manager = I18nManager()
