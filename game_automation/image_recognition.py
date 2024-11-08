@@ -9,6 +9,7 @@ from PIL import Image
 from utils.logger import detailed_logger
 from utils.config_manager import config_manager
 from utils.error_handler import GameAutomationError
+from ocr_prediction.ocr_utils import OCRUtils, OCREngine
 
 class EnhancedImageRecognition:
     def __init__(self):
@@ -26,6 +27,9 @@ class EnhancedImageRecognition:
             transforms.ToTensor(),
             transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
         ])
+
+        # 初始化OCR工具
+        self.ocr_utils = OCRUtils(engine=OCREngine.PADDLE)  # 默认使用PaddleOCR
 
     async def analyze_scene(self, image):
         """分析场景并返回前5个最可能的类别"""
@@ -63,12 +67,12 @@ class EnhancedImageRecognition:
         return results
 
     async def recognize_text(self, image):
-        """使用Tesseract OCR识别图像中的文本"""
+        """使用OCR识别图像中的文本"""
         if image is None:
             raise ValueError("Image cannot be None")
         
-        # 使用Tesseract OCR进行文本识别
-        text = pytesseract.image_to_string(image)
+        # 使用OCR进行文本识别
+        text = self.ocr_utils.recognize_text(image)
         self.logger.info(f"Recognized text: {text}")
         return text
 
@@ -145,5 +149,11 @@ class EnhancedImageRecognition:
         markers = cv2.watershed(image, markers)
         self.logger.info("Image segmentation completed")
         return markers
+
+    async def analyze_scene_with_ocr(self, image):
+        """分析场景并识别文本"""
+        detected_objects = await self.detect_objects(image)
+        recognized_text = await self.recognize_text(image)
+        return detected_objects, recognized_text
 
 enhanced_image_recognition = EnhancedImageRecognition()

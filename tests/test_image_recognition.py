@@ -14,13 +14,6 @@ async def test_analyze_scene():
     result = await recognizer.analyze_scene(image)
     print("Analyze Scene Result:", result)
 
-async def test_recognize_text():
-    recognizer = EnhancedImageRecognition()
-    # 使用有效的测试图像进行测试
-    image = cv2.imread('C:/Users/www11/Documents/leidian64/Pictures/Screenshots/Screenshot_20241108-115456.png')
-    result = await recognizer.recognize_text(image)
-    print("Recognize Text Result:", result)
-
 async def test_detect_objects():
     recognizer = EnhancedImageRecognition()
     # 使用有效的测试图像进行测试
@@ -50,9 +43,8 @@ async def test_segment_image():
     print("Segment Image Result:", result)
 
 if __name__ == "__main__":
-    asyncio.run(test_analyze_scene())
-    asyncio.run(test_recognize_text())
-    asyncio.run(test_detect_objects())
-    asyncio.run(test_analyze_color_scheme())
-    asyncio.run(test_detect_edges())
-    asyncio.run(test_segment_image())
+    await test_analyze_scene()
+    await test_detect_objects()
+    await test_analyze_color_scheme()
+    await test_detect_edges()
+    await test_segment_image()
