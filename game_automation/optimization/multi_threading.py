@@ -1,36 +1,17 @@
-import threading
-import queue
-from utils.logger import detailed_logger
+from game_automation.optimization.thread_manager import thread_pool
 
-class ThreadPool:
-    def __init__(self, num_threads):
-        self.logger = detailed_logger
-        self.num_threads = num_threads
-        self.task_queue = queue.Queue()
-        self.threads = []
-        self._create_threads()
+# 使用示例
+async def main():
+    # 示例任务
+    def example_task(data):
+        print(f"Processing {data}")
 
-    def _create_threads(self):
-        for _ in range(self.num_threads):
-            thread = threading.Thread(target=self._worker)
-            thread.daemon = True
-            thread.start()
-            self.threads.append(thread)
+    # 添加任务到线程池
+    for i in range(10):
+        thread_pool.add_task(example_task, f"Task {i}")
 
-    def _worker(self):
-        while True:
-            task, args, kwargs = self.task_queue.get()
-            try:
-                task(*args, **kwargs)
-            except Exception as e:
-                self.logger.error(f"Error in thread: {str(e)}")
-            finally:
-                self.task_queue.task_done()
+    # 等待所有任务完成
+    thread_pool.wait_completion()
 
-    def add_task(self, task, *args, **kwargs):
-        self.task_queue.put((task, args, kwargs))
-
-    def wait_completion(self):
-        self.task_queue.join()
-
-thread_pool = ThreadPool(4)  # 创建一个有4个线程的线程池
+if __name__ == "__main__":
+    main()
