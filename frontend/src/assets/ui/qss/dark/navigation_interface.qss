@@ -1,0 +1,64 @@
+#navigationInterface {
+    background-color: rgb(35,39,44);
+    border-right: 1px solid rgb(45,50,55);
+    min-width: 240px;
+    padding: 0;
+}
+
+#nav-group {
+    background-color: transparent;
+    margin: 8px;
+    padding: 0;
+}
+
+#nav-group-title {
+    color: #808080;
+    font-size: 12px;
+    font-weight: bold;
+    text-transform: uppercase;
+    padding: 16px 16px 8px 16px;
+}
+
+QLabel {
+    color: #e0e0e0;
+}
+
+#nav-item {
+    padding: 8px 16px;
+    margin: 4px 8px;
+    border-radius: 8px;
+    color: #e0e0e0;
+    font-size: 14px;
+    font-weight: 500;
+    background-color: transparent;
+}
+
+#nav-item:hover {
+    background-color: rgb(45,49,54);
+}
+
+#nav-item:selected {
+    background-color: rgb(45,49,54);
+    color: #f5d742;
+}
+
+QFrame[class="nav-group"] {
+    background-color: rgb(40,44,49);
+    border-radius: 12px;
+    margin: 8px;
+    padding: 8px;
+}
+
+/* 导航徽章 */
+#nav-badge {
+    background-color: #f5d742;
+    color: black;
+    padding: 2px 8px;
+    border-radius: 10px;
+    font-size: 12px;
+}
+
+#nav-badge[type="warning"] {
+    background-color: #dc3545;
+    color: white;
+}
