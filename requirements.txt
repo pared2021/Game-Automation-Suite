@@ -1,33 +1,40 @@
-aiohttp==3.8.1
-aiosqlite==0.17.0
-flask==2.3.2
-Pillow==9.5.0
-pyyaml==5.4.1
-watchdog==2.1.6
+# Game Automation Suite Dependencies
+# This file serves as a reference to all available dependency groups.
+# Install only what you need based on your use case.
 
-numpy==1.21.2
-pandas==1.3.3
-matplotlib==3.4.3
-seaborn==0.11.2
+# Core dependencies (required)
+-r requirements-core.txt
 
-torch==2.0.0
-torchvision==0.10.0
-transformers==4.11.3
-scikit-learn==0.24.2
+# AI/ML dependencies (optional)
+# Required for advanced game automation features
+# Uncomment if you need AI/ML capabilities
+# -r requirements-ai.txt
 
-onnxruntime==1.8.1
-opencv-python-headless==4.5.3.56
+# NLP dependencies (optional)
+# Required for text analysis and natural language processing
+# Uncomment if you need NLP capabilities
+# -r requirements-nlp.txt
 
-psutil==5.8.0
-sentry-sdk==1.5.8
-schedule==1.1.0
+# Development tools (optional)
+# Required for development, testing, and debugging
+# Uncomment if you're contributing to the project
+# -r requirements-dev.txt
 
-dash==2.0.0
-plotly==5.3.1
-networkx==2.6.3
-
-pytest==6.2.5
-pytest-asyncio==0.15.1
-black==21.9b0
-flake8==3.9.2
-mypy==0.910
+# Installation Instructions:
+# 1. Basic installation (core features only):
+#    pip install -r requirements.txt
+#
+# 2. Full installation (all features):
+#    pip install -r requirements.txt -r requirements-ai.txt -r requirements-nlp.txt
+#
+# 3. Development installation:
+#    pip install -r requirements.txt -r requirements-dev.txt
+#
+# Note: Some dependencies have been removed or made optional as part of optimization:
+# - transformers: Removed (imported but not used)
+# - nltk: Removed (not used in codebase)
+# - tensorflow: Removed (standardized on PyTorch)
+# - paddleocr: Removed (migrated to ONNX)
+# - librosa: Removed (unused)
+# - keras: Removed (standardized on PyTorch)
+# - gym: Removed (using stable-baselines3)

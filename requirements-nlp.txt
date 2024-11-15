@@ -1,0 +1,6 @@
+# Natural Language Processing
+spacy>=3.0.0
+
+# Note: The following dependencies have been removed as they are currently unused:
+# - transformers (imported but not used)
+# - nltk (not used in codebase)

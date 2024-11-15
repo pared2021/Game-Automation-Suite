@@ -1,14 +1,27 @@
-import torch
-import torch.nn as nn
-import torch.optim as optim
-import numpy as np
-from collections import deque
-import random
 from utils.logger import detailed_logger
 from utils.config_manager import config_manager
 
+try:
+    import torch
+    import torch.nn as nn
+    import torch.optim as optim
+    HAS_TORCH = True
+except ImportError:
+    HAS_TORCH = False
+
+import numpy as np
+from collections import deque
+import random
+
 class UnifiedDecisionMaker:
     def __init__(self, state_size, action_size, config):
+        if not HAS_TORCH:
+            raise ImportError(
+                "PyTorch is required for AI functionality. "
+                "Please install AI dependencies with: "
+                "pip install -r requirements-ai.txt"
+            )
+            
         self.logger = detailed_logger
         self.config = config
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")

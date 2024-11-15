@@ -1,9 +1,21 @@
-import spacy
 from utils.logger import detailed_logger
 from utils.config_manager import config_manager
 
+try:
+    import spacy
+    HAS_SPACY = True
+except ImportError:
+    HAS_SPACY = False
+
 class LanguageProcessor:
     def __init__(self):
+        if not HAS_SPACY:
+            raise ImportError(
+                "Spacy is required for NLP functionality. "
+                "Please install NLP dependencies with: "
+                "pip install -r requirements-nlp.txt"
+            )
+            
         self.logger = detailed_logger
         self.config = config_manager.get('nlp', {})
         self.nlp = spacy.load("en_core_web_sm")

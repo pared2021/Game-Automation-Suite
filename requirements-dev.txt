@@ -1,0 +1,11 @@
+# Development Tools
+pytest>=6.2.5
+pytest-asyncio>=0.15.1
+black>=21.9b0
+flake8>=3.9.2
+mypy>=0.910
+
+# Visualization & Debug Tools
+dash>=2.0.0
+plotly>=5.3.1
+networkx>=2.6.3
