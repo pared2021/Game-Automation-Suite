@@ -1,4 +1,136 @@
-task_buttons_path: "assets/task_buttons/"
-items_path: "assets/items/"
-enemies_path: "assets/enemies/"
-task_complete_indicator_path: "assets/task_complete_indicator.png"
+# Resource Path Configuration
+
+# Image Resources
+images:
+  base_path: ./resources/images
+  directories:
+    ui:
+      path: ui/
+      description: "UI elements like buttons, icons, and menus"
+    characters:
+      path: characters/
+      description: "Character sprites and portraits"
+    items:
+      path: items/
+      description: "Item icons and effects"
+    backgrounds:
+      path: backgrounds/
+      description: "Background images and scenes"
+    effects:
+      path: effects/
+      description: "Visual effects and animations"
+
+# Model Resources
+models:
+  base_path: ./resources/models
+  directories:
+    ocr:
+      path: ocr/
+      description: "OCR ONNX models"
+    scene:
+      path: scene/
+      description: "Scene recognition models"
+    ai:
+      path: ai/
+      description: "AI decision making models"
+
+# Audio Resources
+audio:
+  base_path: ./resources/audio
+  directories:
+    music:
+      path: music/
+      description: "Background music tracks"
+    sfx:
+      path: sfx/
+      description: "Sound effects"
+    voice:
+      path: voice/
+      description: "Voice lines and dialogue"
+
+# Data Resources
+data:
+  base_path: ./resources/data
+  directories:
+    configs:
+      path: configs/
+      description: "Additional configuration files"
+    templates:
+      path: templates/
+      description: "Template files for various features"
+    locales:
+      path: locales/
+      description: "Localization files"
+
+# Cache Directories
+cache:
+  base_path: ./cache
+  directories:
+    images:
+      path: images/
+      description: "Cached image files"
+    models:
+      path: models/
+      description: "Cached model files"
+    temp:
+      path: temp/
+      description: "Temporary files"
+
+# Log Directories
+logs:
+  base_path: ./logs
+  directories:
+    app:
+      path: app/
+      description: "Application logs"
+    error:
+      path: error/
+      description: "Error logs"
+    debug:
+      path: debug/
+      description: "Debug logs"
+    performance:
+      path: performance/
+      description: "Performance monitoring logs"
+
+# Plugin Resources
+plugins:
+  base_path: ./plugins
+  directories:
+    core:
+      path: core/
+      description: "Core plugin files"
+    custom:
+      path: custom/
+      description: "User-created plugins"
+    data:
+      path: data/
+      description: "Plugin data files"
+
+# Development Resources
+development:
+  base_path: ./development
+  directories:
+    tests:
+      path: tests/
+      description: "Test resources and fixtures"
+    docs:
+      path: docs/
+      description: "Documentation resources"
+    examples:
+      path: examples/
+      description: "Example files and templates"
+
+# Backup Directories
+backup:
+  base_path: ./backup
+  directories:
+    configs:
+      path: configs/
+      description: "Configuration backups"
+    saves:
+      path: saves/
+      description: "Save file backups"
+    logs:
+      path: logs/
+      description: "Log file backups"

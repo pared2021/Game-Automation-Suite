@@ -1,13 +1,136 @@
-name: game-automation-project
-type: web
-env: python
-region: us-east-1
-buildCommand: pip install -r requirements.txt
-startCommand: python main.py
-envVars:
-  - key: PYTHONUNBUFFERED
-    value: "1"
-  - key: LANG
-    value: "en_US.UTF-8"
-  - key: TZ
-    value: "UTC"
+# Deployment Configuration Template
+# Rename this file to deploy.yaml and modify settings according to your environment
+
+# Environment Selection
+environment:
+  type: production  # Possible values: development, staging, production
+  debug: false
+  maintenance_mode: false
+
+# Server Configuration
+server:
+  host: localhost
+  port: 8080
+  workers: 4
+  timeout: 30  # seconds
+  max_requests: 1000
+  ssl:
+    enabled: false
+    cert_path: path/to/cert.pem
+    key_path: path/to/key.pem
+
+# Database Configuration
+database:
+  type: sqlite  # Possible values: sqlite, mysql, postgresql
+  path: ./data/game_automation.db  # For SQLite
+  # Uncomment and configure for MySQL/PostgreSQL
+  # host: localhost
+  # port: 3306
+  # name: game_automation
+  # user: dbuser
+  # password: dbpassword
+  pool:
+    min_size: 5
+    max_size: 20
+    timeout: 30
+
+# Storage Configuration
+storage:
+  type: local  # Possible values: local, s3, azure
+  local:
+    base_path: ./storage
+  # Uncomment and configure for cloud storage
+  # cloud:
+  #   provider: s3
+  #   bucket: your-bucket-name
+  #   region: your-region
+  #   access_key: your-access-key
+  #   secret_key: your-secret-key
+
+# Cache Configuration
+cache:
+  type: memory  # Possible values: memory, redis
+  # Uncomment and configure for Redis
+  # redis:
+  #   host: localhost
+  #   port: 6379
+  #   db: 0
+  #   password: redispass
+
+# Security Settings
+security:
+  secret_key: change_this_to_a_secure_key
+  allowed_hosts:
+    - localhost
+    - 127.0.0.1
+  cors:
+    enabled: true
+    origins:
+      - http://localhost:8080
+      - http://127.0.0.1:8080
+  rate_limiting:
+    enabled: true
+    requests_per_minute: 60
+
+# Monitoring Configuration
+monitoring:
+  enabled: true
+  log_level: INFO
+  metrics:
+    enabled: true
+    interval: 60  # seconds
+  alerts:
+    enabled: false
+    # Uncomment and configure for alert notifications
+    # email:
+    #   smtp_host: smtp.example.com
+    #   smtp_port: 587
+    #   username: alerts@example.com
+    #   password: emailpass
+    #   recipients:
+    #     - admin@example.com
+
+# Resource Limits
+resources:
+  memory_limit: 2048  # MB
+  cpu_limit: 2  # CPU cores
+  storage_limit: 10240  # MB
+  temp_storage: 1024  # MB
+
+# Frontend Configuration
+frontend:
+  static_path: ./frontend/dist
+  api_timeout: 30  # seconds
+  cache_control: public, max-age=3600
+  compression: true
+
+# Backup Configuration
+backup:
+  enabled: true
+  interval: 86400  # seconds (24 hours)
+  retention_days: 30
+  include:
+    - database
+    - configs
+    - logs
+  exclude:
+    - temp
+    - cache
+
+# Logging Configuration
+logging:
+  file: ./logs/deployment.log
+  max_size: 100  # MB
+  backup_count: 10
+  format: "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+  handlers:
+    - file
+    - console
+
+# Development Tools
+# Comment out this section in production
+development:
+  hot_reload: true
+  debug_toolbar: true
+  api_docs: true
+  test_data: false

@@ -1,115 +1,86 @@
-# Game Engine Settings
-game_engine:
-  max_errors: 5
-  max_recovery_attempts: 3
-  default_run_mode: 'balanced'
-  high_cpu_threshold: 90
-  high_memory_threshold: 80
+# Game-Specific Settings
 
-# AI Settings
-ai_settings:
-  state_size: 100
-  action_size: 10
-  learning_rate: 0.001
-  discount_factor: 0.99
-  epsilon: 0.1
-  epsilon_decay: 0.995
-  min_epsilon: 0.01
-  batch_size: 32
-  memory_size: 10000
-  target_update: 10
-  model_save_interval: 1000
-  performance_evaluation_interval: 100
+# Battle System Settings
+battle:
+  auto_battle:
+    enabled: true
+    strategy: balanced  # Possible values: aggressive, balanced, defensive
+    combo_threshold: 3
+    heal_threshold: 50  # Percentage of HP to trigger healing
+  targeting:
+    priority: ["boss", "elite", "normal"]
+    smart_targeting: true
+  skills:
+    auto_skill: true
+    skill_priority: [3, 1, 2]  # Skill numbers in order of priority
+    energy_threshold: 80  # Minimum energy percentage to use skills
 
-# Emulator Settings
-emulator:
-  auto_detect: true
-  default_type: "adb"
-  connection_timeout: 30
-  retry_attempts: 3
-  types:
-    - name: "adb"
-      priority: 1
-      connection_method: "adb_connect"
-    - name: "nox"
-      priority: 2
-      connection_method: "nox_connect"
-      path: "C:/Program Files/Nox/bin/Nox.exe"
-    - name: "bluestacks"
-      priority: 3
-      connection_method: "bluestacks_connect"
-      path: "C:/Program Files/BlueStacks/bluestacks.exe"
+# Character Settings
+character:
+  auto_level_up: true
+  auto_equip: true
+  inventory:
+    auto_sort: true
+    auto_sell: false
+    keep_rarity: ["legendary", "epic", "rare"]
+  equipment:
+    auto_enhance: true
+    max_enhance_level: 20
+    material_quality: ["normal", "rare"]
 
-# Scene Understanding Settings
-scene_understanding:
-  confidence_threshold: 0.7
-  max_objects: 20
+# Resource Management
+resources:
+  auto_collect: true
+  collection_radius: 50  # pixels
+  minimum_stamina: 20
+  stamina_reserve: 10
+  auto_use_items:
+    enabled: true
+    item_priority: ["stamina_potion", "revival_potion"]
 
-# Natural Language Processing Settings
-nlp:
-  model: "en_core_web_sm"
-  max_tokens: 1000
-
-# Reasoning Engine Settings
-reasoning:
-  max_inference_depth: 5
-  confidence_threshold: 0.8
+# Rogue Mode Settings
+rogue:
+  enabled: true
+  difficulty: normal  # Possible values: easy, normal, hard
+  blessing_system:
+    auto_select: true
+    priority: ["damage", "defense", "utility"]
+  path_selection:
+    strategy: balanced  # Possible values: risky, balanced, safe
+    prefer_elites: true
 
 # Performance Settings
 performance:
-  monitoring_interval: 5
-  log_interval: 100
-  plot_interval: 500
-  cpu_threshold: 80  # 新增
-  memory_threshold: 80  # 新增
+  frame_skip: 2
+  animation_quality: high  # Possible values: low, medium, high
+  effects_quality: high
+  resolution: native  # Possible values: low, medium, high, native
 
-# Logging Settings
-logging:
-  level: "INFO"
-  file: "game_automation.log"
-  max_file_size: 10485760  # 10 MB
-  backup_count: 5
+# Auto-Navigation
+navigation:
+  pathfinding: true
+  obstacle_avoidance: true
+  map_refresh_rate: 1.0  # seconds
+  stuck_detection:
+    enabled: true
+    timeout: 5  # seconds
+    retry_attempts: 3
 
-# User Interface Settings
-ui:
-  theme: "light"
-  language: "en-US"
-  auto_update: true
+# Scene Recognition
+scene:
+  recognition_interval: 0.5  # seconds
+  confidence_threshold: 0.85
+  retry_on_fail: 3
+  important_scenes:
+    - battle_start
+    - level_up
+    - reward_screen
+    - death_screen
 
-# Plugin Settings
-plugins:
-  enabled: true
-  directory: "plugins"
-  auto_load: true
-
-# Adaptive Difficulty Settings
-adaptive_difficulty:
-  enabled: true
-  performance_window: 10
-  high_performance_threshold: 0.8
-  low_performance_threshold: 0.3
-  difficulty_increase_rate: 1.1
-  difficulty_decrease_rate: 0.9
-
-# Visualization Settings
-visualization:
-  enabled: true
-  plot_dpi: 300
-  max_data_points: 1000
-
-# Multi-threading Settings
-multi_threading:
-  enabled: true
-  max_threads: 4
-  task_queue_size: 100
-
-# Internationalization Settings
-i18n:
-  default_language: "en-US"
-  available_languages: ["en-US", "zh-CN", "ja-JP"]
-
-# Test Generator Settings
-test_generator:
-  num_test_scenarios: 10
-  max_actions_per_test: 50
-  randomness_factor: 0.2
+# Debug Settings
+debug:
+  show_coordinates: false
+  show_pathfinding: false
+  save_screenshots: false
+  log_battles: true
+  performance_monitoring: true

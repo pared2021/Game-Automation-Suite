@@ -1,16 +1,75 @@
-# 主要配置文件
+# Main Configuration File
+
+# Game Settings
 game_settings:
-  difficulty: normal
+  difficulty: normal  # Possible values: easy, normal, hard
   max_players: 4
+  auto_battle: true
+  debug_mode: false
 
+# Resource Paths
 resource_paths:
-  images: /path/to/images
-  sounds: /path/to/sounds
+  images: ./resources/images
+  sounds: ./resources/sounds
+  models: ./resources/models
+  temp: ./temp
+  logs: ./logs
 
-# 国际化配置
+# Internationalization Settings
 i18n:
   default_language: en-US
   supported_languages:
-    - en-US
-    - ja-JP
-    - zh-CN
+    - en-US  # English
+    - ja-JP  # Japanese
+    - zh-CN  # Chinese Simplified
+  locale_path: ./game_automation/i18n/locales
+
+# Performance Settings
+performance:
+  threading:
+    max_workers: 4
+    task_queue_size: 100
+  resource_allocation:
+    memory_limit: 2048  # MB
+    gpu_enabled: false
+  optimization:
+    cache_enabled: true
+    cache_size: 512  # MB
+
+# Security Settings
+security:
+  encryption_enabled: true
+  ssl_verify: true
+  max_login_attempts: 3
+
+# Logging Configuration
+logging:
+  level: INFO  # Possible values: DEBUG, INFO, WARNING, ERROR, CRITICAL
+  format: "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+  file: ./logs/game_automation.log
+  max_file_size: 10  # MB
+  backup_count: 5
+
+# Development Settings
+development:
+  hot_reload: true
+  mock_data: false
+  test_mode: false
+  profile_code: false
+
+# Web Interface Settings
+web_interface:
+  host: localhost
+  port: 8080
+  debug: false
+  cors_enabled: true
+  allowed_origins:
+    - http://localhost:8080
+    - http://127.0.0.1:8080
+
+# Plugin Settings
+plugins:
+  enabled: true
+  auto_load: true
+  plugin_dir: ./game_automation/plugins
+  blacklist: []

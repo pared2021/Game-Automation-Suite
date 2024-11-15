@@ -1,52 +1,152 @@
-以下是当前代码库中的依赖项分析：
+# Game Automation Suite Dependencies Analysis
 
-1. aiohttp==3.8.1 - 异步 HTTP 客户端/服务器
-2. aiosqlite==0.17.0 - 异步 SQLite 数据库
-3. opencv-python-headless==4.5.3.56 - 计算机视觉库，可能需要 C++ 编译器
-4. numpy==1.21.2 - 数值计算库，可能需要 C++ 编译器
-5. paddleocr==2.4.0 - OCR 库
-6. psutil==5.8.0 - 系统和进程管理库
-7. sentry-sdk==1.5.8 - 错误监控库
-8. schedule==1.1.0 - 任务调度库
-9. Pillow==9.5.0 - 图像处理库
-10. matplotlib==3.4.3 - 数据可视化库
-11. pandas==1.3.3 - 数据分析库
-12. pyyaml==5.4.1 - YAML 解析库
-13. flask==2.3.2 - Web 框架
-14. torch==2.0.0 - 深度学习库，可能需要 C++ 编译器
-15. torchvision==0.10.0 - 计算机视觉库，可能需要 C++ 编译器
-16. seaborn==0.11.2 - 数据可视化库
-17. pyenchant==3.2.1 - 拼写检查库
-18. watchdog==2.1.6 - 文件系统监控库
-19. transformers==4.11.3 - 自然语言处理库
-20. networkx==2.6.3 - 图论库
-21. pyDatalog==0.17.1 - Datalog 库
-22. dash==2.0.0 - Web 应用框架
-23. plotly==5.3.1 - 数据可视化库
-24. librosa==0.8.1 - 音频分析库
-25. spacy==3.1.3 - 自然语言处理库
-26. nltk==3.6.3 - 自然语言处理库
-27. scikit-learn==0.24.2 - 机器学习库
-28. tensorflow==2.12.0 - 深度学习库，可能需要 C++ 编译器
-29. keras==2.6.0 - 深度学习库
-30. gym==0.21.0 - 强化学习库
-31. stable-baselines3==1.2.0 - 强化学习库
-32. optuna==2.10.0 - 超参数优化库
-33. ray[rllib]==1.7.0 - 分布式计算库
-34. pytest==6.2.5 - 测试框架
-35. pytest-asyncio==0.15.1 - 异步测试支持
-36. black==21.9b0 - 代码格式化工具
-37. flake8==3.9.2 - 代码检查工具
-38. mypy==0.910 - 类型检查工具
+## Core Dependencies (Required)
+These dependencies are essential for the basic functionality of the system:
 
-需要进一步分析的库：
-- opencv-python-headless
-- numpy
-- torch
-- torchvision
-- tensorflow
-- keras
-- gym
-- stable-baselines3
+1. aiohttp==3.8.1
+   - Purpose: Async HTTP client/server framework
+   - Usage: Web interface and API communications
+   - Notes: Required for core functionality
 
-建议：考虑是否可以用纯 Python 实现替代上述库，或者是否可以找到不需要 C++ 编译器的替代库。
+2. aiosqlite==0.17.0
+   - Purpose: Async SQLite database operations
+   - Usage: Local data storage and caching
+   - Notes: Lightweight database solution
+
+3. flask==2.3.2
+   - Purpose: Web framework
+   - Usage: Backend API server
+   - Notes: Required for web interface
+
+4. Pillow==9.5.0
+   - Purpose: Image processing
+   - Usage: Image manipulation and analysis
+   - Notes: Required for screenshot processing
+
+5. pyyaml>=6.0.0
+   - Purpose: YAML file parsing
+   - Usage: Configuration management
+   - Notes: Required for config files
+
+6. watchdog>=2.1.6
+   - Purpose: File system monitoring
+   - Usage: Hot reloading of configurations
+   - Notes: Improves development experience
+
+## Image Processing Dependencies
+Core image processing libraries:
+
+1. opencv-python-headless==4.5.3.56
+   - Purpose: Computer vision operations
+   - Usage: Scene analysis and image processing
+   - Notes: Headless version to reduce size
+
+2. onnxruntime>=1.8.1
+   - Purpose: ONNX model inference
+   - Usage: OCR and image recognition
+   - Notes: Replaced paddleocr for better performance
+
+## Data Processing Dependencies
+Libraries for data handling and analysis:
+
+1. numpy>=1.21.2
+   - Purpose: Numerical computations
+   - Usage: Data processing and analysis
+   - Notes: Required for image processing
+
+2. pandas>=1.3.3
+   - Purpose: Data analysis
+   - Usage: Game data processing and analysis
+   - Notes: Used for advanced analytics
+
+## Monitoring and Performance
+System monitoring and performance optimization:
+
+1. psutil>=5.8.0
+   - Purpose: System and process monitoring
+   - Usage: Resource management
+   - Notes: Required for performance optimization
+
+2. sentry-sdk>=1.5.8
+   - Purpose: Error tracking
+   - Usage: Production monitoring
+   - Notes: Optional for development
+
+3. schedule>=1.1.0
+   - Purpose: Task scheduling
+   - Usage: Automated tasks and monitoring
+   - Notes: Required for automation features
+
+## Development Dependencies
+Tools for development and testing (optional):
+
+1. pytest>=6.2.5
+   - Purpose: Testing framework
+   - Usage: Unit and integration testing
+   - Notes: Required for development
+
+2. pytest-asyncio>=0.15.1
+   - Purpose: Async test support
+   - Usage: Testing async functions
+   - Notes: Required for development
+
+3. pytest-cov>=2.12.1
+   - Purpose: Test coverage
+   - Usage: Coverage reporting
+   - Notes: Required for development
+
+4. black>=21.9b0
+   - Purpose: Code formatting
+   - Usage: Maintaining code style
+   - Notes: Optional for development
+
+5. flake8>=3.9.2
+   - Purpose: Code linting
+   - Usage: Code quality checks
+   - Notes: Optional for development
+
+## Removed Dependencies
+The following dependencies have been removed to optimize the project:
+
+1. transformers
+   - Reason: Not actively used
+   - Alternative: Using lightweight custom models
+
+2. tensorflow/keras
+   - Reason: Standardized on ONNX
+   - Alternative: Pre-trained ONNX models
+
+3. paddleocr
+   - Reason: Migrated to ONNX
+   - Alternative: Custom ONNX OCR models
+
+4. nltk
+   - Reason: Not used in codebase
+   - Alternative: Basic text processing
+
+5. gym
+   - Reason: Not required for current features
+   - Alternative: Custom environment handling
+
+## Installation Notes
+
+1. Basic Installation (Core Features):
+   ```
+   pip install -r requirements.txt
+   ```
+
+2. Development Installation:
+   ```
+   pip install -r requirements.txt -r requirements-dev.txt
+   ```
+
+3. System Requirements:
+   - Python 3.8 or higher
+   - 2GB RAM minimum
+   - 500MB disk space
+   - Optional: CUDA support for GPU acceleration
+
+4. Compatibility Notes:
+   - Tested on Python 3.8, 3.9, and 3.10
+   - Windows/Linux/MacOS compatible
+   - ARM architecture supported (except for some optional dependencies)

@@ -12,15 +12,13 @@ This project implements an advanced game automation control system based on ADB,
 - Asynchronous programming for improved performance
 - Enhanced error handling and logging
 - Improved security measures
-- AI-driven decision making using neural networks and reinforcement learning
-- Advanced image recognition with deep learning models
+- AI-driven decision making using reinforcement learning
+- Advanced image recognition with ONNX models
 - Comprehensive game analysis and visualization
 - Rogue-like game mode with blessing system
-- Multimodal analysis (image, text, audio)
 - Scene understanding and context-aware decision making
 - Dynamic resource allocation for optimized performance
-- Federated learning capabilities
-- Advanced testing and debugging tools
+- Plugin system for extensibility
 
 ## Project Structure
 
@@ -51,7 +49,7 @@ This project implements an advanced game automation control system based on ADB,
 ├── config (Configuration files)
 ├── utils (Utility modules)
 ├── tests (Unit tests)
-├── webapp (Web application frontend)
+├── frontend (Web application frontend)
 ├── main (Main program entry points)
 └── README.md (Project documentation)
 ```
@@ -60,7 +58,7 @@ This project implements an advanced game automation control system based on ADB,
 
 1. Clone the repository:
    ```
-   git clone https://github.com/your-username/game-automation-control.git
+   git clone https://github.com/yourusername/game-automation-suite.git
    ```
 
 2. Install Python dependencies:
@@ -70,7 +68,7 @@ This project implements an advanced game automation control system based on ADB,
 
 3. Install frontend dependencies:
    ```
-   cd webapp
+   cd frontend
    npm install
    ```
 
@@ -83,7 +81,7 @@ This project implements an advanced game automation control system based on ADB,
 
 2. Start the frontend development server:
    ```
-   cd webapp
+   cd frontend
    npm run serve
    ```
 
@@ -91,7 +89,13 @@ This project implements an advanced game automation control system based on ADB,
 
 ## Configuration
 
-Edit the configuration files in the `config` directory to customize the automation behavior and game settings. The project now supports hot-reloading of configuration files.
+Edit the configuration files in the `config` directory to customize the automation behavior and game settings. The project supports hot-reloading of configuration files.
+
+Key configuration files:
+- `config.yaml`: Main configuration file
+- `game_settings.yaml`: Game-specific settings
+- `resource_paths.yaml`: Resource file locations
+- `deploy.template.yaml`: Deployment configuration template
 
 ## API Documentation
 
@@ -102,6 +106,11 @@ For detailed API documentation, please refer to the `docs/api.md` file.
 Execute the test suite:
 ```
 python -m pytest tests
+```
+
+For test coverage report:
+```
+python -m pytest tests --cov=game_automation --cov-report=html
 ```
 
 ## Contributing
@@ -118,12 +127,11 @@ This project is licensed under the MIT License. See the `LICENSE` file for detai
 
 ## Recent Updates
 
-- Added multimodal analysis capabilities
-- Implemented advanced scene understanding with context-aware decision making
-- Enhanced AI decision making with reinforcement learning and meta-learning
+- Migrated OCR system to ONNX for better performance
+- Implemented plugin system for extensibility
+- Enhanced scene understanding with context-aware decision making
 - Improved performance with dynamic resource allocation
-- Added federated learning capabilities for distributed learning
-- Implemented advanced testing and debugging tools
-- Enhanced security measures with encryption and secure communication
+- Enhanced security measures with encryption
 - Improved internationalization support
-- Added plugin system for extensibility
+- Optimized dependency management
+- Added comprehensive test coverage reporting
