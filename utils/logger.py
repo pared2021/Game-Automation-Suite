@@ -9,6 +9,11 @@ class DetailedLogger:
 
         formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 
+        # Create logs directory if it doesn't exist
+        log_dir = os.path.dirname(log_file)
+        if log_dir and not os.path.exists(log_dir):
+            os.makedirs(log_dir)
+
         file_handler = RotatingFileHandler(log_file, maxBytes=10*1024*1024, backupCount=5)
         file_handler.setFormatter(formatter)
         self.logger.addHandler(file_handler)
@@ -32,4 +37,18 @@ class DetailedLogger:
     def critical(self, message):
         self.logger.critical(message)
 
-detailed_logger = DetailedLogger('game_automation')
+def setup_logger(name, log_file='logs/game_automation.log', level=logging.INFO):
+    """Setup and return a logger instance
+    
+    Args:
+        name: Logger name
+        log_file: Path to log file
+        level: Logging level
+        
+    Returns:
+        DetailedLogger: Configured logger instance
+    """
+    return DetailedLogger(name, log_file, level)
+
+# Default logger instance
+detailed_logger = DetailedLogger('game_automation', 'logs/game_automation.log')

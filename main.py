@@ -1,8 +1,11 @@
 import asyncio
-from game_automation.game_engine import game_engine
+from game_automation.core.engine import game_engine
 from game_automation.gui.main_window import run_gui
 from utils.logger import detailed_logger
 from utils.config_manager import config_manager
+
+async def run_gui_async():
+    run_gui()
 
 async def main():
     try:
@@ -18,7 +21,7 @@ async def main():
             await game_engine.optimize_performance()
         
         # 运行GUI
-        run_gui()
+        asyncio.create_task(run_gui_async())
         
     except Exception as e:
         detailed_logger.error(f"Error in main program: {str(e)}")

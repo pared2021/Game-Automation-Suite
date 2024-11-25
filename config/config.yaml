@@ -24,6 +24,46 @@ i18n:
     - zh-CN  # Chinese Simplified
   locale_path: ./game_automation/i18n/locales
 
+# Task Execution Settings
+task_execution:
+  max_concurrent_tasks: 5
+  default_timeout: 300  # seconds
+  retry_count: 3
+  retry_delay: 5  # seconds
+  resource_check_interval: 60  # seconds
+  monitoring:
+    enabled: true
+    interval: 1.0  # seconds
+    alert_threshold: 0.8  # 80% of resource limits
+
+# Data Management Settings
+data_management:
+  history:
+    max_entries: 10000
+    cleanup_interval: 86400  # 24 hours in seconds
+    retention_days: 30
+  version_control:
+    enabled: true
+    max_versions: 100
+    auto_cleanup: true
+    backup_enabled: true
+  context:
+    max_cache_size: 1000
+    cleanup_threshold: 0.8  # 80% of max size
+
+# State Machine Settings
+state_machine:
+  transition_timeout: 30  # seconds
+  deadlock_detection:
+    enabled: true
+    check_interval: 1.0  # seconds
+    history_size: 100
+    pattern_length: 5
+  monitoring:
+    enabled: true
+    max_history: 1000
+    alert_on_deadlock: true
+
 # Performance Settings
 performance:
   threading:
@@ -35,12 +75,29 @@ performance:
   optimization:
     cache_enabled: true
     cache_size: 512  # MB
+  monitoring:
+    metrics_history_size: 1000
+    sampling_interval: 1.0  # seconds
+    adaptive_thresholds: true
+    threshold_update_interval: 300  # seconds
+    resource_limits:
+      cpu_threshold: 80  # percent
+      memory_threshold: 80  # percent
+      max_threads: 100
 
 # Security Settings
 security:
   encryption_enabled: true
   ssl_verify: true
   max_login_attempts: 3
+
+# Device Settings
+device:
+  max_reconnect_attempts: 3
+  reconnect_delay: 2
+  min_reconnect_interval: 5
+  operation_timeout: 30
+  max_concurrent_operations: 3
 
 # Logging Configuration
 logging:
@@ -49,6 +106,8 @@ logging:
   file: ./logs/game_automation.log
   max_file_size: 10  # MB
   backup_count: 5
+  detailed_error_logging: true
+  log_retention_days: 7
 
 # Development Settings
 development:

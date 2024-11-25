@@ -14,6 +14,17 @@ Experience = namedtuple('Experience', ('state', 'action', 'next_state', 'reward'
 
 class AIDecisionMaker:
     def __init__(self, game_engine):
+        """Initialize AI Decision Maker
+        
+        Args:
+            game_engine: GameEngine instance
+        
+        Raises:
+            ValueError: If game_engine is None
+        """
+        if game_engine is None:
+            raise ValueError("game_engine cannot be None")
+            
         self.logger = setup_logger('ai_decision_maker')
         self.game_engine = game_engine
         self.config = game_engine.config.get('ai_settings', {})
@@ -89,5 +100,3 @@ class AIDecisionMaker:
     async def evaluate_performance(self, criteria):
         self.logger.info("Evaluating AI performance")
         # Performance evaluation logic here
-
-ai_decision_maker = AIDecisionMaker(None)  # 初始化时传入 None，后续在 GameEngine 中设置正确的引用

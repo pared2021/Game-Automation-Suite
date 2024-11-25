@@ -2,6 +2,7 @@ from typing import Dict, List, Optional, Any
 from datetime import datetime, timedelta
 import json
 import os
+import time
 from dataclasses import dataclass
 
 from utils.error_handler import log_exception, GameAutomationError
@@ -30,6 +31,9 @@ class TaskHistory:
         """
         self.history_dir = history_dir
         self.current_history: List[TaskHistoryEntry] = []
+        self.max_entries = 10000  # 最大记录数
+        self.cleanup_interval = 24 * 3600  # 清理间隔(秒)
+        self.last_cleanup_time = 0
         self._ensure_history_dir()
 
     def _ensure_history_dir(self) -> None:
@@ -38,6 +42,27 @@ class TaskHistory:
             os.makedirs(self.history_dir)
             detailed_logger.info(f"创建历史记录目录: {self.history_dir}")
 
+    def _check_cleanup_needed(self) -> bool:
+        """检查是否需要清理
+        
+        Returns:
+            bool: 是否需要清理
+        """
+        current_time = time.time()
+        
+        # 检查时间间隔
+        if current_time - self.last_cleanup_time > self.cleanup_interval:
+            return True
+            
+        # 检查记录数量
+        total_entries = 0
+        for date_dir in os.listdir(self.history_dir):
+            date_path = os.path.join(self.history_dir, date_dir)
+            if os.path.isdir(date_path):
+                total_entries += len(os.listdir(date_path))
+                
+        return total_entries >= self.max_entries
+
     @log_exception
     def add_entry(self, entry: TaskHistoryEntry) -> None:
         """添加历史记录
@@ -45,9 +70,18 @@ class TaskHistory:
         Args:
             entry: 历史记录条目
         """
+        # 检查是否需要清理
+        if self._check_cleanup_needed():
+            self.cleanup_old_records()
+            self.last_cleanup_time = time.time()
+        
         self.current_history.append(entry)
         self._save_entry(entry)
         detailed_logger.info(f"添加任务历史记录: {entry.task_name} ({entry.task_id})")
+        
+        # 限制内存中的记录数量
+        if len(self.current_history) > self.max_entries:
+            self.current_history = self.current_history[-self.max_entries:]
 
     def _save_entry(self, entry: TaskHistoryEntry) -> None:
         """保存单个历史记录

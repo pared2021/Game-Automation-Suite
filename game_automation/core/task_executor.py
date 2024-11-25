@@ -1,6 +1,7 @@
 from typing import Dict, Optional, Type
 from datetime import datetime
 import asyncio
+import time
 
 from utils.error_handler import log_exception, GameAutomationError
 from utils.logger import detailed_logger
@@ -34,6 +35,7 @@ class GameTask(Task):
         self.device_manager = device_manager
         self.scene_analyzer = scene_analyzer
         self.execution_data: Dict = {}  # 存储执行过程中的数据
+        self.timeout = kwargs.get('timeout', 300)  # 默认5分钟超时
 
     async def verify_prerequisites(self) -> bool:
         """验证任务执行前提条件
@@ -73,6 +75,13 @@ class TaskExecutor:
         self.scene_analyzer = scene_analyzer
         self.current_task: Optional[GameTask] = None
         self._task_types: Dict[str, Type[GameTask]] = {}
+        
+        # 资源管理
+        self.max_concurrent_tasks = 5
+        self.task_semaphore = asyncio.Semaphore(self.max_concurrent_tasks)
+        self.active_tasks = 0
+        self.last_resource_check = 0
+        self.resource_check_interval = 60  # 资源检查间隔(秒)
 
     @log_exception
     def register_task_type(self, task_type: str, task_class: Type[GameTask]) -> None:
@@ -119,6 +128,25 @@ class TaskExecutor:
         
         return task
 
+    async def _check_resources(self) -> bool:
+        """检查系统资源使用情况
+        
+        Returns:
+            bool: 资源是否充足
+        """
+        current_time = time.time()
+        if current_time - self.last_resource_check < self.resource_check_interval:
+            return True
+            
+        self.last_resource_check = current_time
+        
+        # TODO: 添加具体的资源检查逻辑
+        if self.active_tasks >= self.max_concurrent_tasks:
+            detailed_logger.warning("达到最大并发任务数限制")
+            return False
+            
+        return True
+
     @log_exception
     async def execute_task(self, task: GameTask) -> bool:
         """执行任务
@@ -132,35 +160,42 @@ class TaskExecutor:
         if self.current_task:
             raise TaskExecutionError("当前有正在执行的任务")
             
-        self.current_task = task
-        detailed_logger.info(f"开始执行任务: {task.name} ({task.task_id})")
-        
-        try:
-            # 验证前提条件
-            if not await task.verify_prerequisites():
-                raise TaskExecutionError("任务前提条件不满足")
+        # 检查资源
+        if not await self._check_resources():
+            raise TaskExecutionError("系统资源不足")
             
-            # 执行任务
-            success = await self._execute_task_with_monitoring(task)
+        async with self.task_semaphore:
+            self.current_task = task
+            self.active_tasks += 1
+            detailed_logger.info(f"开始执行任务: {task.name} ({task.task_id})")
             
-            # 任务清理
-            await task.cleanup()
-            
-            if success:
-                detailed_logger.info(f"任务执行成功: {task.name}")
-            else:
-                detailed_logger.error(f"任务执行失败: {task.name}")
-            
-            return success
-            
-        except Exception as e:
-            detailed_logger.error(f"任务执行异常: {str(e)}")
-            task.status = TaskStatus.FAILED
-            task.error_message = str(e)
-            return False
-            
-        finally:
-            self.current_task = None
+            try:
+                # 验证前提条件
+                if not await task.verify_prerequisites():
+                    raise TaskExecutionError("任务前提条件不满足")
+                
+                # 执行任务
+                success = await self._execute_task_with_monitoring(task)
+                
+                # 任务清理
+                await task.cleanup()
+                
+                if success:
+                    detailed_logger.info(f"任务执行成功: {task.name}")
+                else:
+                    detailed_logger.error(f"任务执行失败: {task.name}")
+                
+                return success
+                
+            except Exception as e:
+                detailed_logger.error(f"任务执行异常: {str(e)}")
+                task.status = TaskStatus.FAILED
+                task.error_message = str(e)
+                return False
+                
+            finally:
+                self.current_task = None
+                self.active_tasks -= 1
 
     async def _execute_task_with_monitoring(self, task: GameTask) -> bool:
         """执行任务并进行监控
@@ -171,30 +206,39 @@ class TaskExecutor:
         Returns:
             bool: 任务是否执行成功
         """
-        # 创建监控任务
-        monitor_task = asyncio.create_task(self._monitor_task_execution(task))
-        
         try:
-            # 执行任务
-            success = task.execute()
-            
-            # 取消监控
-            monitor_task.cancel()
-            try:
-                await monitor_task
-            except asyncio.CancelledError:
-                pass
-            
-            return success
-            
-        except Exception as e:
-            # 确保监控任务被取消
-            monitor_task.cancel()
-            try:
-                await monitor_task
-            except asyncio.CancelledError:
-                pass
-            raise
+            # 添加超时控制
+            async with asyncio.timeout(task.timeout):
+                # 创建监控任务
+                monitor_task = asyncio.create_task(self._monitor_task_execution(task))
+                
+                try:
+                    # 执行任务
+                    success = await task.execute()
+                    
+                    # 取消监控
+                    monitor_task.cancel()
+                    try:
+                        await monitor_task
+                    except asyncio.CancelledError:
+                        pass
+                    
+                    return success
+                    
+                except Exception as e:
+                    # 确保监控任务被取消
+                    monitor_task.cancel()
+                    try:
+                        await monitor_task
+                    except asyncio.CancelledError:
+                        pass
+                    raise
+                    
+        except asyncio.TimeoutError:
+            detailed_logger.error(f"任务执行超时: {task.name}")
+            task.status = TaskStatus.FAILED
+            task.error_message = "Task execution timeout"
+            return False
 
     async def _monitor_task_execution(self, task: GameTask) -> None:
         """监控任务执行

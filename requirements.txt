@@ -1,40 +1,37 @@
-# Game Automation Suite Dependencies
-# This file serves as a reference to all available dependency groups.
-# Install only what you need based on your use case.
+# Core Dependencies
+flask>=2.0.0
+flask-babel>=4.0.0
+numpy>=2.0.0
+torch>=2.1.0
+uiautomator2>=3.2.6
+pyyaml>=6.0.0
+pillow>=9.5.0
+adbutils>=2.8.0
+lxml>=5.3.0
+requests>=2.32.0
 
-# Core dependencies (required)
--r requirements-core.txt
+# AI and Machine Learning
+scikit-learn>=1.3.0
+pandas>=2.1.0
+matplotlib>=3.7.0
 
-# AI/ML dependencies (optional)
-# Required for advanced game automation features
-# Uncomment if you need AI/ML capabilities
-# -r requirements-ai.txt
+# Development and Testing
+pytest>=7.4.0
+pytest-asyncio>=0.21.0
+black>=23.0.0
+flake8>=6.1.0
+mypy>=1.5.0
 
-# NLP dependencies (optional)
-# Required for text analysis and natural language processing
-# Uncomment if you need NLP capabilities
-# -r requirements-nlp.txt
+# Logging and Monitoring
+python-json-logger>=2.0.0
+prometheus-client>=0.17.0
 
-# Development tools (optional)
-# Required for development, testing, and debugging
-# Uncomment if you're contributing to the project
-# -r requirements-dev.txt
+# Async Support
+aiohttp>=3.8.0
+asyncio>=3.4.3
 
-# Installation Instructions:
-# 1. Basic installation (core features only):
-#    pip install -r requirements.txt
-#
-# 2. Full installation (all features):
-#    pip install -r requirements.txt -r requirements-ai.txt -r requirements-nlp.txt
-#
-# 3. Development installation:
-#    pip install -r requirements.txt -r requirements-dev.txt
-#
-# Note: Some dependencies have been removed or made optional as part of optimization:
-# - transformers: Removed (imported but not used)
-# - nltk: Removed (not used in codebase)
-# - tensorflow: Removed (standardized on PyTorch)
-# - paddleocr: Removed (migrated to ONNX)
-# - librosa: Removed (unused)
-# - keras: Removed (standardized on PyTorch)
-# - gym: Removed (using stable-baselines3)
+# Optional Dependencies
+# Uncomment if needed:
+# tensorboard>=2.14.0  # for AI training visualization
+# opencv-python>=4.8.0  # for image processing
+# cuda-python>=12.0.0  # for NVIDIA GPU support

@@ -1,7 +1,9 @@
-from typing import Dict, List, Optional, Any, Callable
+from typing import Dict, List, Optional, Any, Callable, Sequence
 from enum import Enum, auto
 from dataclasses import dataclass
 from datetime import datetime
+import asyncio
+import time
 
 from utils.error_handler import log_exception, GameAutomationError
 from utils.logger import detailed_logger
@@ -22,6 +24,15 @@ class StateContext:
     start_time: datetime
     parameters: Dict[str, Any]
     shared_data: Dict[str, Any]
+
+@dataclass
+class StateHistoryEntry:
+    """状态历史记录条目"""
+    state_id: str
+    timestamp: datetime
+    duration: Optional[float] = None
+    transition_id: Optional[str] = None
+    error: Optional[str] = None
 
 class State:
     """状态基类"""
@@ -268,6 +279,78 @@ class StateMachine:
         self.current_state: Optional[State] = None
         self.initial_state: Optional[State] = None
         self.shared_data: Dict[str, Any] = {}
+        
+        # 状态历史和死锁检测
+        self.state_history: List[StateHistoryEntry] = []
+        self.max_history_size = 100  # 最大历史记录数
+        self.deadlock_check_size = 5  # 检查死锁的状态序列长度
+        
+        # 超时控制
+        self.transition_timeout = 30  # 状态转换超时时间(秒)
+        self.last_transition_time = time.time()
+
+    def _is_repeating_sequence(self, sequence: Sequence[str]) -> bool:
+        """检查状态序列是否重复
+        
+        Args:
+            sequence: 状态序列
+            
+        Returns:
+            bool: 是否重复
+        """
+        if len(sequence) < 2 * self.deadlock_check_size:
+            return False
+            
+        # 检查最近的状态序列是否形成循环
+        recent = sequence[-self.deadlock_check_size:]
+        previous = sequence[-2*self.deadlock_check_size:-self.deadlock_check_size]
+        return recent == previous
+
+    async def _check_deadlock(self) -> bool:
+        """检查是否出现死锁
+        
+        Returns:
+            bool: 是否死锁
+        """
+        if len(self.state_history) >= 2 * self.deadlock_check_size:
+            recent_states = [entry.state_id for entry in self.state_history]
+            if self._is_repeating_sequence(recent_states):
+                detailed_logger.warning(f"检测到状态机死锁: {self.machine_id}")
+                return True
+        return False
+
+    def _add_history_entry(self, state_id: str, 
+                          transition_id: Optional[str] = None,
+                          error: Optional[str] = None) -> None:
+        """添加历史记录
+        
+        Args:
+            state_id: 状态ID
+            transition_id: 转换ID
+            error: 错误信息
+        """
+        current_time = datetime.now()
+        
+        # 计算上一个状态的持续时间
+        if self.state_history:
+            last_entry = self.state_history[-1]
+            if not last_entry.duration:
+                last_entry.duration = (
+                    current_time - last_entry.timestamp
+                ).total_seconds()
+        
+        # 添加新记录
+        entry = StateHistoryEntry(
+            state_id=state_id,
+            timestamp=current_time,
+            transition_id=transition_id,
+            error=error
+        )
+        self.state_history.append(entry)
+        
+        # 限制历史记录大小
+        if len(self.state_history) > self.max_history_size:
+            self.state_history = self.state_history[-self.max_history_size:]
 
     def add_state(self, state: State, is_initial: bool = False) -> None:
         """添加状态
@@ -299,6 +382,7 @@ class StateMachine:
         # 进入初始状态
         self.current_state = self.initial_state
         await self.current_state.enter(full_context)
+        self._add_history_entry(self.current_state.state_id)
 
     async def update(self, context: Optional[Dict[str, Any]] = None) -> None:
         """更新状态机
@@ -307,6 +391,14 @@ class StateMachine:
             context: 执行上下文
         """
         if not self.current_state:
+            return
+            
+        # 检查死锁
+        if await self._check_deadlock():
+            self._add_history_entry(
+                self.current_state.state_id,
+                error="Deadlock detected"
+            )
             return
             
         # 合并上下文
@@ -321,22 +413,40 @@ class StateMachine:
             await self.current_state.update(full_context)
             
             # 检查转换
-            for transition in self.current_state.transitions.values():
-                if await transition.can_transit(full_context):
-                    # 执行转换
-                    await transition.execute(full_context)
-                    
-                    # 退出当前状态
-                    await self.current_state.exit(full_context)
-                    
-                    # 进入目标状态
-                    target_state = self.states[transition.target_state_id]
-                    self.current_state = target_state
-                    await self.current_state.enter(full_context)
-                    break
-                    
+            async with asyncio.timeout(self.transition_timeout):
+                for transition in self.current_state.transitions.values():
+                    if await transition.can_transit(full_context):
+                        # 执行转换
+                        await transition.execute(full_context)
+                        
+                        # 退出当前状态
+                        await self.current_state.exit(full_context)
+                        
+                        # 记录转换
+                        self._add_history_entry(
+                            self.current_state.state_id,
+                            transition.transition_id
+                        )
+                        
+                        # 进入目标状态
+                        target_state = self.states[transition.target_state_id]
+                        self.current_state = target_state
+                        await self.current_state.enter(full_context)
+                        self._add_history_entry(self.current_state.state_id)
+                        break
+                        
+        except asyncio.TimeoutError:
+            detailed_logger.error(f"状态转换超时: {self.current_state.state_id}")
+            self._add_history_entry(
+                self.current_state.state_id,
+                error="Transition timeout"
+            )
         except Exception as e:
             detailed_logger.error(f"状态机更新失败: {str(e)}")
+            self._add_history_entry(
+                self.current_state.state_id,
+                error=str(e)
+            )
 
     def get_current_state(self) -> Optional[State]:
         """获取当前状态
@@ -345,6 +455,14 @@ class StateMachine:
             Optional[State]: 当前状态
         """
         return self.current_state
+
+    def get_state_history(self) -> List[StateHistoryEntry]:
+        """获取状态历史记录
+        
+        Returns:
+            List[StateHistoryEntry]: 历史记录列表
+        """
+        return self.state_history.copy()
 
     def get_statistics(self) -> Dict[str, Any]:
         """获取状态机统计信息
@@ -357,7 +475,13 @@ class StateMachine:
             'name': self.name,
             'total_states': len(self.states),
             'current_state': self.current_state.state_id if self.current_state else None,
-            'states': [state.get_statistics() for state in self.states.values()]
+            'states': [state.get_statistics() for state in self.states.values()],
+            'history_stats': {
+                'total_entries': len(self.state_history),
+                'unique_states': len(set(entry.state_id for entry in self.state_history)),
+                'transitions': len([e for e in self.state_history if e.transition_id]),
+                'errors': len([e for e in self.state_history if e.error])
+            }
         }
         
         # 收集转换统计

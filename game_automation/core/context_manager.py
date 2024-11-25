@@ -4,6 +4,7 @@ from datetime import datetime
 import json
 import os
 from enum import Enum, auto
+import time
 
 from utils.error_handler import log_exception, GameAutomationError
 from utils.logger import detailed_logger
@@ -31,6 +32,14 @@ class ContextMetadata:
     lifetime: ContextLifetime
     version: int
     tags: Set[str]
+
+@dataclass
+class VersionEntry:
+    """版本记录条目"""
+    version: int
+    timestamp: datetime
+    data: Any
+    metadata: Dict[str, Any]
 
 class ContextValidator:
     """上下文验证器"""
@@ -95,6 +104,11 @@ class ContextManager:
         self.metadata: Dict[str, ContextMetadata] = {}
         self.validator = ContextValidator()
         
+        # 版本控制
+        self.data_version = "1.0.0"
+        self.version_history: Dict[str, List[VersionEntry]] = {}
+        self.max_history_entries = 100  # 每个键最多保留的历史版本数
+        
         # 加载持久化数据
         self._load_persistent_data()
 
@@ -105,13 +119,17 @@ class ContextManager:
             global_file = os.path.join(self.context_dir, "global_context.json")
             if os.path.exists(global_file):
                 with open(global_file, 'r', encoding='utf-8') as f:
-                    self.global_context = json.load(f)
+                    data = json.load(f)
+                    if self._validate_version(data):
+                        self.global_context = data['content']
                     
             # 加载会话上下文
             session_file = os.path.join(self.context_dir, "session_context.json")
             if os.path.exists(session_file):
                 with open(session_file, 'r', encoding='utf-8') as f:
-                    self.session_context = json.load(f)
+                    data = json.load(f)
+                    if self._validate_version(data):
+                        self.session_context = data['content']
                     
             # 加载元数据
             metadata_file = os.path.join(self.context_dir, "context_metadata.json")
@@ -127,22 +145,68 @@ class ContextManager:
                             version=data['version'],
                             tags=set(data['tags'])
                         )
+            
+            # 加载版本历史
+            history_file = os.path.join(self.context_dir, "version_history.json")
+            if os.path.exists(history_file):
+                with open(history_file, 'r', encoding='utf-8') as f:
+                    history_dict = json.load(f)
+                    for key, entries in history_dict.items():
+                        self.version_history[key] = [
+                            VersionEntry(
+                                version=entry['version'],
+                                timestamp=datetime.fromisoformat(entry['timestamp']),
+                                data=entry['data'],
+                                metadata=entry['metadata']
+                            )
+                            for entry in entries
+                        ]
                         
         except Exception as e:
             detailed_logger.error(f"加载上下文数据失败: {str(e)}")
 
+    def _validate_version(self, data: Dict) -> bool:
+        """验证数据版本
+        
+        Args:
+            data: 要验证的数据
+            
+        Returns:
+            bool: 是否有效
+        """
+        if not isinstance(data, dict):
+            return False
+            
+        if 'version' not in data or 'timestamp' not in data or 'content' not in data:
+            return False
+            
+        return True
+
     def _save_persistent_data(self) -> None:
         """保存持久化的上下文数据"""
         try:
+            # 准备版本化的数据
+            current_time = datetime.now().isoformat()
+            
             # 保存全局上下文
+            global_data = {
+                'version': self.data_version,
+                'timestamp': current_time,
+                'content': self.global_context
+            }
             global_file = os.path.join(self.context_dir, "global_context.json")
             with open(global_file, 'w', encoding='utf-8') as f:
-                json.dump(self.global_context, f, indent=2, ensure_ascii=False)
+                json.dump(global_data, f, indent=2, ensure_ascii=False)
                 
             # 保存会话上下文
+            session_data = {
+                'version': self.data_version,
+                'timestamp': current_time,
+                'content': self.session_context
+            }
             session_file = os.path.join(self.context_dir, "session_context.json")
             with open(session_file, 'w', encoding='utf-8') as f:
-                json.dump(self.session_context, f, indent=2, ensure_ascii=False)
+                json.dump(session_data, f, indent=2, ensure_ascii=False)
                 
             # 保存元数据
             metadata_dict = {
@@ -160,8 +224,77 @@ class ContextManager:
             with open(metadata_file, 'w', encoding='utf-8') as f:
                 json.dump(metadata_dict, f, indent=2, ensure_ascii=False)
                 
+            # 保存版本历史
+            history_dict = {
+                key: [
+                    {
+                        'version': entry.version,
+                        'timestamp': entry.timestamp.isoformat(),
+                        'data': entry.data,
+                        'metadata': entry.metadata
+                    }
+                    for entry in entries
+                ]
+                for key, entries in self.version_history.items()
+            }
+            history_file = os.path.join(self.context_dir, "version_history.json")
+            with open(history_file, 'w', encoding='utf-8') as f:
+                json.dump(history_dict, f, indent=2, ensure_ascii=False)
+                
         except Exception as e:
             detailed_logger.error(f"保存上下文数据失败: {str(e)}")
+
+    def _add_version_entry(self, key: str, value: Any, metadata: Dict[str, Any]) -> None:
+        """添加版本历史记录
+        
+        Args:
+            key: 键名
+            value: 值
+            metadata: 元数据
+        """
+        if key not in self.version_history:
+            self.version_history[key] = []
+            
+        entry = VersionEntry(
+            version=metadata.get('version', 1),
+            timestamp=datetime.now(),
+            data=value,
+            metadata=metadata
+        )
+        
+        self.version_history[key].append(entry)
+        
+        # 限制历史记录数量
+        if len(self.version_history[key]) > self.max_history_entries:
+            self.version_history[key] = self.version_history[key][-self.max_history_entries:]
+
+    def get_version_history(self, key: str) -> List[VersionEntry]:
+        """获取键的版本历史
+        
+        Args:
+            key: 键名
+            
+        Returns:
+            List[VersionEntry]: 版本历史记录
+        """
+        return self.version_history.get(key, [])
+
+    def rollback_to_version(self, key: str, version: int) -> bool:
+        """回滚到指定版本
+        
+        Args:
+            key: 键名
+            version: 目标版本号
+            
+        Returns:
+            bool: 是否成功
+        """
+        entries = self.version_history.get(key, [])
+        for entry in entries:
+            if entry.version == version:
+                self.set_value(key, entry.data)
+                return True
+        return False
 
     def set_value(self, key: str, value: Any,
                  scope: ContextScope = ContextScope.GLOBAL,
@@ -204,6 +337,17 @@ class ContextManager:
                 version=1,
                 tags=set(tags) if tags else set()
             )
+            
+        # 添加版本历史记录
+        metadata_dict = {
+            'created_at': self.metadata[key].created_at.isoformat(),
+            'updated_at': self.metadata[key].updated_at.isoformat(),
+            'scope': scope.name,
+            'lifetime': lifetime.name,
+            'version': self.metadata[key].version,
+            'tags': list(self.metadata[key].tags)
+        }
+        self._add_version_entry(key, value, metadata_dict)
             
         # 设置值
         context[key] = value
@@ -467,7 +611,12 @@ class ContextManager:
                 'max': 0,
                 'avg': 0
             },
-            'tag_stats': {}
+            'tag_stats': {},
+            'history_stats': {
+                'total_entries': sum(len(entries) for entries in self.version_history.values()),
+                'keys_with_history': len(self.version_history),
+                'avg_versions_per_key': 0
+            }
         }
         
         # 统计各项指标
@@ -497,6 +646,11 @@ class ContextManager:
         # 计算平均版本
         if self.metadata:
             stats['version_stats']['avg'] = total_version / len(self.metadata)
+            if stats['history_stats']['keys_with_history'] > 0:
+                stats['history_stats']['avg_versions_per_key'] = (
+                    stats['history_stats']['total_entries'] /
+                    stats['history_stats']['keys_with_history']
+                )
         else:
             stats['version_stats']['min'] = 0
             

@@ -41,10 +41,10 @@ class UIAutomator:
             detailed_logger.warning(f"点击坐标 ({x}, {y}) 超出屏幕范围")
             return False
 
-        start_time = time.time()
+        end_time = time.time() + timeout
         for attempt in range(retry):
             try:
-                if time.time() - start_time > timeout:
+                if time.time() > end_time:
                     detailed_logger.warning(f"点击操作超时 ({x}, {y})")
                     return False
                 
@@ -53,7 +53,7 @@ class UIAutomator:
                 return True
                 
             except Exception as e:
-                if attempt < retry - 1:
+                if attempt < retry - 1 and time.time() + 1 <= end_time:  # 确保有足够时间重试
                     detailed_logger.warning(f"点击失败，正在重试 ({attempt + 1}/{retry}): {str(e)}")
                     time.sleep(1)
                 else:
@@ -217,7 +217,7 @@ class UIAutomator:
             bool: 坐标是否有效
         """
         width, height = self._screen_size
-        return 0 <= x <= width and 0 <= y <= height
+        return 0 <= x < width and 0 <= y < height  # 修改为严格小于
 
     @property
     def screen_size(self) -> Tuple[int, int]:
