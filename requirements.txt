@@ -1,37 +1,6 @@
-# Core Dependencies
-flask>=2.0.0
-flask-babel>=4.0.0
-numpy>=2.0.0
-torch>=2.1.0
-uiautomator2>=3.2.6
-pyyaml>=6.0.0
-pillow>=9.5.0
-adbutils>=2.8.0
-lxml>=5.3.0
-requests>=2.32.0
-
-# AI and Machine Learning
-scikit-learn>=1.3.0
-pandas>=2.1.0
-matplotlib>=3.7.0
-
-# Development and Testing
-pytest>=7.4.0
-pytest-asyncio>=0.21.0
-black>=23.0.0
-flake8>=6.1.0
-mypy>=1.5.0
-
-# Logging and Monitoring
-python-json-logger>=2.0.0
-prometheus-client>=0.17.0
-
-# Async Support
-aiohttp>=3.8.0
-asyncio>=3.4.3
-
-# Optional Dependencies
-# Uncomment if needed:
-# tensorboard>=2.14.0  # for AI training visualization
-# opencv-python>=4.8.0  # for image processing
-# cuda-python>=12.0.0  # for NVIDIA GPU support
+opencv-python
+numpy
+pyautogui
+pytesseract
+Pillow
+pytest
