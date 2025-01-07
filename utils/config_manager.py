@@ -11,15 +11,15 @@ class ConfigManager:
     def load_config(self, filename: str = 'config.yaml'):
         config_path = os.path.join(self.config_dir, filename)
         if os.path.exists(config_path):
-            with open(config_path, 'r') as f:
+            with open(config_path, 'r', encoding='utf-8') as f:
                 self.config = yaml.safe_load(f)
         else:
             self.config = {}
 
     def save_config(self, filename: str = 'config.yaml'):
         config_path = os.path.join(self.config_dir, filename)
-        with open(config_path, 'w') as f:
-            yaml.dump(self.config, f)
+        with open(config_path, 'w', encoding='utf-8') as f:
+            yaml.dump(self.config, f, allow_unicode=True)
 
     def get(self, key: str, default: Any = None) -> Any:
         return self.config.get(key, default)
@@ -30,7 +30,7 @@ class ConfigManager:
     def load_preset(self, preset_name: str):
         preset_path = os.path.join(self.config_dir, 'presets', f'{preset_name}.yaml')
         if os.path.exists(preset_path):
-            with open(preset_path, 'r') as f:
+            with open(preset_path, 'r', encoding='utf-8') as f:
                 preset_config = yaml.safe_load(f)
             self.config.update(preset_config)
         else:
@@ -40,7 +40,7 @@ class ConfigManager:
         preset_dir = os.path.join(self.config_dir, 'presets')
         os.makedirs(preset_dir, exist_ok=True)
         preset_path = os.path.join(preset_dir, f'{preset_name}.yaml')
-        with open(preset_path, 'w') as f:
-            yaml.dump(self.config, f)
+        with open(preset_path, 'w', encoding='utf-8') as f:
+            yaml.dump(self.config, f, allow_unicode=True)
 
 config_manager = ConfigManager()

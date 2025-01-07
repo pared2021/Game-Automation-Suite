@@ -1,134 +1,40 @@
-# Main Configuration File
+# 基本配置
+app:
+  name: "游戏自动化套件"
+  version: "1.0.0"
+  language: "zh-CN"
 
-# Game Settings
-game_settings:
-  difficulty: normal  # Possible values: easy, normal, hard
-  max_players: 4
-  auto_battle: true
-  debug_mode: false
-
-# Resource Paths
-resource_paths:
-  images: ./resources/images
-  sounds: ./resources/sounds
-  models: ./resources/models
-  temp: ./temp
-  logs: ./logs
-
-# Internationalization Settings
-i18n:
-  default_language: en-US
-  supported_languages:
-    - en-US  # English
-    - ja-JP  # Japanese
-    - zh-CN  # Chinese Simplified
-  locale_path: ./game_automation/i18n/locales
-
-# Task Execution Settings
-task_execution:
-  max_concurrent_tasks: 5
-  default_timeout: 300  # seconds
-  retry_count: 3
-  retry_delay: 5  # seconds
-  resource_check_interval: 60  # seconds
-  monitoring:
-    enabled: true
-    interval: 1.0  # seconds
-    alert_threshold: 0.8  # 80% of resource limits
-
-# Data Management Settings
-data_management:
-  history:
-    max_entries: 10000
-    cleanup_interval: 86400  # 24 hours in seconds
-    retention_days: 30
-  version_control:
-    enabled: true
-    max_versions: 100
-    auto_cleanup: true
-    backup_enabled: true
-  context:
-    max_cache_size: 1000
-    cleanup_threshold: 0.8  # 80% of max size
-
-# State Machine Settings
-state_machine:
-  transition_timeout: 30  # seconds
-  deadlock_detection:
-    enabled: true
-    check_interval: 1.0  # seconds
-    history_size: 100
-    pattern_length: 5
-  monitoring:
-    enabled: true
-    max_history: 1000
-    alert_on_deadlock: true
-
-# Performance Settings
+# 性能设置
 performance:
-  threading:
-    max_workers: 4
-    task_queue_size: 100
-  resource_allocation:
-    memory_limit: 2048  # MB
-    gpu_enabled: false
-  optimization:
-    cache_enabled: true
-    cache_size: 512  # MB
-  monitoring:
-    metrics_history_size: 1000
-    sampling_interval: 1.0  # seconds
-    adaptive_thresholds: true
-    threshold_update_interval: 300  # seconds
-    resource_limits:
-      cpu_threshold: 80  # percent
-      memory_threshold: 80  # percent
-      max_threads: 100
+  mode: "balanced"  # balanced, performance, power-saving
+  auto_optimize: false
+  resource_limits:
+    cpu_threshold: 80.0
+    memory_threshold: 80.0
+    max_threads: 100
 
-# Security Settings
-security:
-  encryption_enabled: true
-  ssl_verify: true
-  max_login_attempts: 3
+# 游戏设置
+game:
+  auto_restart: true
+  max_retries: 3
+  timeout: 300
 
-# Device Settings
-device:
-  max_reconnect_attempts: 3
-  reconnect_delay: 2
-  min_reconnect_interval: 5
-  operation_timeout: 30
-  max_concurrent_operations: 3
-
-# Logging Configuration
+# 日志设置
 logging:
-  level: INFO  # Possible values: DEBUG, INFO, WARNING, ERROR, CRITICAL
-  format: "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
-  file: ./logs/game_automation.log
-  max_file_size: 10  # MB
+  level: "INFO"
+  file: "logs/app.log"
+  max_size: 10485760  # 10MB
   backup_count: 5
-  detailed_error_logging: true
-  log_retention_days: 7
 
-# Development Settings
-development:
-  hot_reload: true
-  mock_data: false
+# 测试设置
+testing:
+  run_automated_tests: false
   test_mode: false
-  profile_code: false
 
-# Web Interface Settings
-web_interface:
-  host: localhost
-  port: 8080
-  debug: false
-  cors_enabled: true
-  allowed_origins:
-    - http://localhost:8080
-    - http://127.0.0.1:8080
-
-# Plugin Settings
-plugins:
-  enabled: true
-  auto_load: true
-  plugin_dir: ./game_automation/plugins
-  blacklist: []
+# UI设置
+ui:
+  theme: "dark"
+  refresh_rate: 1000  # ms
+  window_size:
+    width: 1200
+    height: 800

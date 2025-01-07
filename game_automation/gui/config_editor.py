@@ -54,4 +54,4 @@ class ConfigEditor(QWidget):
         except Exception as e:
             QMessageBox.warning(self, "Error", f"Failed to save configuration: {str(e)}")
 
-config_editor = ConfigEditor()
+# 不在模块级别创建实例

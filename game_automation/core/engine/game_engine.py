@@ -223,3 +223,39 @@ class GameEngine(EngineBase):
         
         required_fields = ['action']
         return all(field in data for field in required_fields)
+
+    async def run_game_loop(self):
+        """运行游戏主循环"""
+        try:
+            self.log_info("Starting game loop")
+            while True:
+                # 在这里添加游戏循环的具体逻辑
+                await asyncio.sleep(1)  # 暂时只是简单的休眠
+                
+        except asyncio.CancelledError:
+            self.log_info("Game loop cancelled")
+        except Exception as e:
+            self.log_error("Error in game loop", e)
+            raise
+
+    async def run_automated_tests(self):
+        """运行自动化测试"""
+        try:
+            self.log_info("Starting automated tests")
+            # TODO: 实现自动化测试逻辑
+            await asyncio.sleep(1)  # 暂时只是简单的休眠
+            self.log_info("Automated tests completed")
+        except Exception as e:
+            self.log_error("Error in automated tests", e)
+            raise
+
+    async def optimize_performance(self):
+        """执行性能优化"""
+        try:
+            self.log_info("Starting performance optimization")
+            # TODO: 实现性能优化逻辑
+            await asyncio.sleep(1)  # 暂时只是简单的休眠
+            self.log_info("Performance optimization completed")
+        except Exception as e:
+            self.log_error("Error in performance optimization", e)
+            raise
