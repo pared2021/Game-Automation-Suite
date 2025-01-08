@@ -1,5 +1,5 @@
-from PyQt5.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QTreeWidget, QTreeWidgetItem, QLineEdit, QPushButton, QMessageBox
-from PyQt5.QtCore import Qt
+from PyQt6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QTreeWidget, QTreeWidgetItem, QLineEdit, QPushButton, QMessageBox
+from PyQt6.QtCore import Qt
 from utils.config_manager import config_manager
 
 class ConfigEditor(QWidget):

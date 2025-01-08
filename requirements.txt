@@ -4,3 +4,9 @@ pyautogui
 pytesseract
 Pillow
 pytest
+PyQt6==6.7.0
+PyQt6-Charts==6.7.0
+psutil
+PyYAML
+uiautomator2
+torch

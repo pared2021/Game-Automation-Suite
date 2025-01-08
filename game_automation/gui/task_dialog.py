@@ -1,7 +1,7 @@
-from PyQt5.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QLabel, 
+from PyQt6.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QLabel, 
                             QLineEdit, QComboBox, QSpinBox, QPushButton,
                             QFormLayout, QGroupBox, QTextEdit)
-from PyQt5.QtCore import Qt
+from PyQt6.QtCore import Qt
 
 class TaskDialog(QDialog):
     def __init__(self, parent=None, task=None):

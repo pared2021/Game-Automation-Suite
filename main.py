@@ -1,5 +1,5 @@
 import sys
-from PyQt5.QtWidgets import QApplication
+from PyQt6.QtWidgets import QApplication
 from game_automation.gui.main_window import MainWindow
 import threading
 import asyncio
@@ -46,4 +46,4 @@ if __name__ == "__main__":
     window.show()
     
     # 运行应用程序
-    sys.exit(app.exec_())
+    sys.exit(app.exec())

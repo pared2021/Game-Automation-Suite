@@ -1,10 +1,10 @@
-from PyQt5.QtWidgets import (QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, 
+from PyQt6.QtWidgets import (QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, 
                             QLabel, QPushButton, QComboBox, QTabWidget, QTextEdit, 
                             QListWidget, QProgressBar, QMessageBox, QFrame, QGroupBox,
                             QListWidgetItem)
-from PyQt5.QtCore import Qt, QTimer
-from PyQt5.QtGui import QPalette, QColor, QPainter
-from PyQt5.QtChart import QChart, QChartView, QLineSeries, QValueAxis
+from PyQt6.QtCore import Qt, QTimer
+from PyQt6.QtGui import QPalette, QColor, QPainter
+from PyQt6.QtCharts import QChart, QChartView, QLineSeries, QValueAxis
 import psutil
 import os
 import json
@@ -67,7 +67,7 @@ class MainWindow(QMainWindow):
         
         # CPU状态
         cpu_frame = QFrame()
-        cpu_frame.setFrameStyle(QFrame.StyledPanel)
+        cpu_frame.setFrameStyle(QFrame.Shape.StyledPanel)
         cpu_layout = QVBoxLayout(cpu_frame)
         self.cpu_label = QLabel("CPU: 0%")
         self.cpu_progress = QProgressBar()
@@ -77,7 +77,7 @@ class MainWindow(QMainWindow):
         
         # 内存状态
         memory_frame = QFrame()
-        memory_frame.setFrameStyle(QFrame.StyledPanel)
+        memory_frame.setFrameStyle(QFrame.Shape.StyledPanel)
         memory_layout = QVBoxLayout(memory_frame)
         self.memory_label = QLabel("内存: 0%")
         self.memory_progress = QProgressBar()
@@ -87,7 +87,7 @@ class MainWindow(QMainWindow):
         
         # 任务状态
         task_frame = QFrame()
-        task_frame.setFrameStyle(QFrame.StyledPanel)
+        task_frame.setFrameStyle(QFrame.Shape.StyledPanel)
         task_layout = QVBoxLayout(task_frame)
         self.tasks_label = QLabel("任务数: 0")
         self.task_progress = QProgressBar()
@@ -108,23 +108,23 @@ class MainWindow(QMainWindow):
         # 创建图表
         self.performance_chart = QChart()
         self.performance_chart.setTitle("系统性能")
-        self.performance_chart.setTheme(QChart.ChartThemeDark)
+        self.performance_chart.setTheme(QChart.ChartTheme.ChartThemeDark)
         self.performance_chart.legend().setVisible(True)
-        self.performance_chart.legend().setAlignment(Qt.AlignBottom)
+        self.performance_chart.legend().setAlignment(Qt.AlignmentFlag.AlignBottom)
         
         # 创建X轴（时间）
         axis_x = QValueAxis()
         axis_x.setRange(0, self.max_data_points)
         axis_x.setLabelFormat("%d")
         axis_x.setTitleText("时间 (秒)")
-        self.performance_chart.addAxis(axis_x, Qt.AlignBottom)
+        self.performance_chart.addAxis(axis_x, Qt.AlignmentFlag.AlignBottom)
         
         # 创建Y轴（百分比）
         axis_y = QValueAxis()
         axis_y.setRange(0, 100)
         axis_y.setLabelFormat("%d%%")
         axis_y.setTitleText("使用率")
-        self.performance_chart.addAxis(axis_y, Qt.AlignLeft)
+        self.performance_chart.addAxis(axis_y, Qt.AlignmentFlag.AlignLeft)
         
         # CPU数据系列
         self.cpu_series = QLineSeries()
@@ -142,7 +142,7 @@ class MainWindow(QMainWindow):
         
         # 创建图表视图
         chart_view = QChartView(self.performance_chart)
-        chart_view.setRenderHint(QPainter.Antialiasing)
+        chart_view.setRenderHint(QPainter.RenderHint.Antialiasing)
         chart_layout.addWidget(chart_view)
         
         layout.addWidget(chart_group)
