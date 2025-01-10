@@ -1,326 +1,296 @@
-import os
+from typing import Optional, Tuple
+from pathlib import Path
 import asyncio
 import subprocess
-import time
-from typing import Optional, Dict, List
-from collections import deque
+import tempfile
 from datetime import datetime
-import platform
+import json
+import os
 
-from utils.error_handler import log_exception, DeviceConnectionError
-from utils.logger import detailed_logger
-from .ui_automator import UIAutomator
+from PIL import Image
+import numpy as np
 
-class MockUIAutomator:
-    """Mock UI Automator for simulation mode"""
-    def __init__(self, device_id: str = "mock_device"):
-        self.device_id = device_id
-        self.connected = True
-        detailed_logger.info(f"Initialized Mock UI Automator for {device_id}")
-
-    def get_device_info(self) -> Dict:
-        """Get mock device info"""
-        return {
-            'device_id': self.device_id,
-            'status': 'connected',
-            'mode': 'simulation'
-        }
-
-    def get_ui_state(self) -> Dict:
-        """Get mock UI state"""
-        return {
-            'screen': 'mock_screen',
-            'elements': [],
-            'timestamp': datetime.now().isoformat()
-        }
+class DeviceError(Exception):
+    """设备错误"""
+    pass
 
 class DeviceManager:
-    """Device manager responsible for device connection, monitoring and reconnection"""
+    """设备管理器"""
     
-    def __init__(self, simulation_mode: bool = False):
-        """Initialize device manager
+    def __init__(self):
+        self._initialized = False
+        self._connected = False
+        self._device_id = None
+        self._resolution = (1920, 1080)
+        self._config = None
+        self._screenshot_path = None
         
-        Args:
-            simulation_mode: Whether to run in simulation mode
-        """
-        self.device_id: Optional[str] = None
-        self.ui_automator: Optional[UIAutomator] = None
-        self.connected: bool = False
-        self.monitor_task = None
-        self.simulation_mode = simulation_mode
-        
-        # Reconnection control
-        self._max_reconnect_attempts = 3
-        self._reconnect_delay = 2
-        self._last_reconnect_time = 0
-        self._min_reconnect_interval = 5
-        
-        # Concurrency control
-        self._operation_lock = asyncio.Lock()
-        self._resource_lock = asyncio.Lock()
-        self._operation_queue = deque()
-        self._active_operations: Dict[str, datetime] = {}
-        self._max_concurrent_operations = 3
-        self._operation_timeout = 30
-        
-        # Resource management
-        self._resources: Dict[str, any] = {}
-        self._cleanup_scheduled = False
-
-        if not simulation_mode:
+    async def initialize(self):
+        """初始化设备管理器"""
+        if not self._initialized:
             try:
-                self._adb_path = self._get_adb_path()
-            except DeviceConnectionError as e:
-                detailed_logger.warning(f"ADB not found: {str(e)}. Falling back to simulation mode.")
-                self.simulation_mode = True
-
-    @log_exception
-    def _get_adb_path(self) -> str:
-        """Get ADB executable path
-        
-        Returns:
-            str: ADB executable path
-        
-        Raises:
-            DeviceConnectionError: If ADB not found
-        """
-        # Check environment variable
-        android_home = os.environ.get('ANDROID_HOME')
-        if android_home:
-            if platform.system() == 'Windows':
-                adb_path = os.path.join(android_home, 'platform-tools', 'adb.exe')
-            else:
-                adb_path = os.path.join(android_home, 'platform-tools', 'adb')
-            if os.path.exists(adb_path):
-                return adb_path
-
-        # Check common paths
-        common_paths = []
-        if platform.system() == 'Windows':
-            common_paths = [
-                r'C:\Program Files (x86)\Android\android-sdk\platform-tools\adb.exe',
-                r'C:\Users\%USERNAME%\AppData\Local\Android\Sdk\platform-tools\adb.exe'
-            ]
-        else:
-            common_paths = [
-                '/usr/local/bin/adb',
-                '/usr/bin/adb',
-                os.path.expanduser('~/Library/Android/sdk/platform-tools/adb'),
-                os.path.expanduser('~/Android/Sdk/platform-tools/adb')
-            ]
-        
-        for path in common_paths:
-            expanded_path = os.path.expandvars(path)
-            if os.path.exists(expanded_path):
-                return expanded_path
-
-        raise DeviceConnectionError("ADB executable not found")
-
-    @log_exception
-    async def connect(self, device_id: Optional[str] = None) -> None:
-        """Connect to device
-        
-        Args:
-            device_id: Optional device ID. If not provided, connect to first available device
-        """
-        if self.simulation_mode:
-            self.device_id = device_id or "mock_device"
-            self.ui_automator = MockUIAutomator(self.device_id)
-            self.connected = True
-            detailed_logger.info(f"Connected to mock device: {self.device_id}")
-            
-            # Start device monitoring
-            if self.monitor_task is None:
-                self.monitor_task = asyncio.create_task(self._monitor_device())
-            return
-
-        try:
-            if device_id is None:
-                # Get connected devices list
-                result = subprocess.run(
-                    [self._adb_path, 'devices'],
-                    capture_output=True,
-                    text=True,
-                    check=True
+                # 加载配置
+                config_path = Path("config/config.json")
+                if not config_path.exists():
+                    raise DeviceError("配置文件不存在")
+                    
+                with open(config_path, "r", encoding="utf-8") as f:
+                    self._config = json.load(f)
+                    
+                # 设置分辨率
+                self._resolution = (
+                    self._config["device"]["resolution"]["width"],
+                    self._config["device"]["resolution"]["height"]
                 )
                 
-                # Parse devices list
-                lines = result.stdout.strip().split('\n')[1:]
-                devices = [line.split('\t')[0] for line in lines if '\tdevice' in line]
+                # 创建临时目录
+                self._screenshot_path = Path(tempfile.gettempdir()) / "game_automation"
+                self._screenshot_path.mkdir(parents=True, exist_ok=True)
                 
-                if not devices:
-                    raise DeviceConnectionError("No connected devices found")
+                self._initialized = True
                 
-                device_id = devices[0]
+            except Exception as e:
+                raise DeviceError(f"初始化失败: {str(e)}")
+                
+    async def cleanup(self):
+        """清理资源"""
+        if self._initialized:
+            try:
+                # 断开设备
+                if self._connected:
+                    await self.disconnect()
+                    
+                # 删除临时文件
+                if self._screenshot_path and self._screenshot_path.exists():
+                    for file in self._screenshot_path.glob("*.png"):
+                        file.unlink()
+                        
+                self._initialized = False
+                
+            except Exception as e:
+                raise DeviceError(f"清理失败: {str(e)}")
+                
+    async def connect(self):
+        """连接设备"""
+        if not self._initialized:
+            raise DeviceError("未初始化")
             
-            # Clean up existing resources
-            if self.connected:
-                await self._cleanup_resources()
-            
-            # Try to connect device
-            self.ui_automator = UIAutomator(device_id)
-            self.device_id = device_id
-            self.connected = True
-            
-            detailed_logger.info(f"Connected to device: {device_id}")
-            
-            # Start device monitoring
-            if self.monitor_task is None:
-                self.monitor_task = asyncio.create_task(self._monitor_device())
-        
-        except Exception as e:
-            self.connected = False
-            raise DeviceConnectionError(f"Failed to connect device: {str(e)}")
-
-    @log_exception
-    async def disconnect(self) -> None:
-        """Disconnect device"""
-        if self.monitor_task:
-            self.monitor_task.cancel()
-            self.monitor_task = None
-        
-        await self._cleanup_resources()
-        
-        self.connected = False
-        self.device_id = None
-        self.ui_automator = None
-        detailed_logger.info("Device disconnected")
-
-    @log_exception
-    async def check_connection(self) -> bool:
-        """Check device connection status
-        
-        Returns:
-            bool: Whether device is properly connected
-        """
-        if not self.device_id or not self.ui_automator:
-            return False
+        if self._connected:
+            return
             
         try:
-            if self.simulation_mode:
-                return True
-
-            # Try to get device info to verify connection
-            device_info = self.ui_automator.get_device_info()
-            return bool(device_info)
+            # 获取设备列表
+            process = await asyncio.create_subprocess_exec(
+                "adb", "devices",
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE
+            )
+            stdout, stderr = await process.communicate()
+            
+            if process.returncode != 0:
+                raise DeviceError(f"获取设备列表失败: {stderr.decode()}")
+                
+            # 解析设备ID
+            lines = stdout.decode().strip().split("\n")[1:]
+            devices = [
+                line.split("\t")[0]
+                for line in lines
+                if line.strip() and "\tdevice" in line
+            ]
+            
+            if not devices:
+                raise DeviceError("未找到设备")
+                
+            # 使用第一个设备
+            self._device_id = devices[0]
+            
+            # 获取分辨率
+            process = await asyncio.create_subprocess_exec(
+                "adb", "-s", self._device_id, "shell", "wm", "size",
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE
+            )
+            stdout, stderr = await process.communicate()
+            
+            if process.returncode == 0:
+                size = stdout.decode().strip()
+                if "Physical size:" in size:
+                    width, height = map(
+                        int,
+                        size.split("Physical size:")[1].strip().split("x")
+                    )
+                    self._resolution = (width, height)
+                    
+            self._connected = True
+            
         except Exception as e:
-            detailed_logger.warning(f"Device connection check failed: {str(e)}")
-            return False
-
-    async def _monitor_device(self) -> None:
-        """Monitor device status and handle disconnection/reconnection"""
-        while True:
-            try:
-                if not await self.check_connection():
-                    current_time = time.time()
-                    if current_time - self._last_reconnect_time < self._min_reconnect_interval:
-                        await asyncio.sleep(1)
-                        continue
-                        
-                    self._last_reconnect_time = current_time
-                    await self._handle_disconnection()
-                
-                await asyncio.sleep(5)
-                
-            except asyncio.CancelledError:
-                break
-            except Exception as e:
-                detailed_logger.error(f"Device monitoring error: {str(e)}")
-                await asyncio.sleep(5)
-
-    async def _handle_disconnection(self) -> None:
-        """Handle device disconnection"""
-        detailed_logger.warning("Device disconnection detected")
-        self.connected = False
-        await self._cleanup_resources()
+            raise DeviceError(f"连接设备失败: {str(e)}")
+            
+    async def disconnect(self):
+        """断开设备"""
+        if not self._initialized:
+            raise DeviceError("未初始化")
+            
+        if not self._connected:
+            return
+            
+        try:
+            # 断开设备
+            process = await asyncio.create_subprocess_exec(
+                "adb", "disconnect", self._device_id,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE
+            )
+            await process.communicate()
+            
+            self._connected = False
+            self._device_id = None
+            
+        except Exception as e:
+            raise DeviceError(f"断开设备失败: {str(e)}")
+            
+    async def get_screenshot(self) -> Image.Image:
+        """获取屏幕截图
         
-        if self.simulation_mode:
-            try:
-                await self.connect(self.device_id)
-                return
-            except Exception as e:
-                detailed_logger.error(f"Mock device reconnection failed: {str(e)}")
-                return
-
-        for attempt in range(self._max_reconnect_attempts):
-            try:
-                detailed_logger.info(f"Attempting to reconnect device (attempt {attempt + 1}/{self._max_reconnect_attempts})")
-                await self.connect(self.device_id)
-                if self.connected:
-                    return
-            except DeviceConnectionError as e:
-                detailed_logger.error(f"Reconnection failed: {str(e)}")
-                if attempt < self._max_reconnect_attempts - 1:
-                    await asyncio.sleep(self._reconnect_delay)
-        
-        detailed_logger.error("Device reconnection failed, stopping monitoring")
-        if self.monitor_task:
-            self.monitor_task.cancel()
-            self.monitor_task = None
-
-    async def queue_operation(self, operation_func, *args, **kwargs) -> any:
-        """Queue operation for execution
+        Returns:
+            Image.Image: 截图对象
+        """
+        if not self._initialized:
+            raise DeviceError("未初始化")
+            
+        if not self._connected:
+            raise DeviceError("未连接设备")
+            
+        try:
+            # 生成临时文件路径
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
+            temp_path = self._screenshot_path / f"screenshot_{timestamp}.png"
+            
+            # 截图
+            process = await asyncio.create_subprocess_exec(
+                "adb", "-s", self._device_id, "shell", "screencap", "-p",
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE
+            )
+            stdout, stderr = await process.communicate()
+            
+            if process.returncode != 0:
+                raise DeviceError(f"截图失败: {stderr.decode()}")
+                
+            # 保存截图
+            with open(temp_path, "wb") as f:
+                f.write(stdout.replace(b"\r\n", b"\n"))
+                
+            # 读取图片
+            image = Image.open(temp_path)
+            
+            # 调整大小
+            if image.size != self._resolution:
+                image = image.resize(self._resolution)
+                
+            # 删除临时文件
+            temp_path.unlink()
+            
+            return image
+            
+        except Exception as e:
+            raise DeviceError(f"获取截图失败: {str(e)}")
+            
+    async def tap(self, x: int, y: int):
+        """点击屏幕
         
         Args:
-            operation_func: Operation function to execute
-            *args: Position arguments
-            **kwargs: Keyword arguments
+            x: X坐标
+            y: Y坐标
+        """
+        if not self._initialized:
+            raise DeviceError("未初始化")
             
-        Returns:
-            any: Operation result
-        """
-        # Create operation task
-        async def execute_operation():
-            while True:
-                if await self._acquire_operation_slot():
-                    op_id = f"op_{len(self._active_operations)}"
-                    try:
-                        result = await operation_func(*args, **kwargs)
-                        return result
-                    finally:
-                        await self._release_operation_slot(op_id)
-                await asyncio.sleep(0.1)
-        
-        # Queue operation
-        task = asyncio.create_task(execute_operation())
-        self._operation_queue.append(task)
-        
+        if not self._connected:
+            raise DeviceError("未连接设备")
+            
         try:
-            return await task
-        finally:
-            self._operation_queue.remove(task)
-
-    @property
-    def is_connected(self) -> bool:
-        """Get device connection status
+            # 执行点击
+            process = await asyncio.create_subprocess_exec(
+                "adb", "-s", self._device_id, "shell", "input", "tap",
+                str(x), str(y),
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE
+            )
+            stdout, stderr = await process.communicate()
+            
+            if process.returncode != 0:
+                raise DeviceError(f"点击失败: {stderr.decode()}")
+                
+            # 等待点击延迟
+            await asyncio.sleep(self._config["device"]["tap_delay"])
+            
+        except Exception as e:
+            raise DeviceError(f"点击失败: {str(e)}")
+            
+    async def swipe(
+        self,
+        start_x: int,
+        start_y: int,
+        end_x: int,
+        end_y: int,
+        duration: float = None
+    ):
+        """滑动屏幕
+        
+        Args:
+            start_x: 起始X坐标
+            start_y: 起始Y坐标
+            end_x: 结束X坐标
+            end_y: 结束Y坐标
+            duration: 持续时间(秒)
+        """
+        if not self._initialized:
+            raise DeviceError("未初始化")
+            
+        if not self._connected:
+            raise DeviceError("未连接设备")
+            
+        try:
+            # 设置持续时间
+            if duration is None:
+                duration = self._config["device"]["swipe_duration"]
+                
+            # 转换为毫秒
+            duration_ms = int(duration * 1000)
+            
+            # 执行滑动
+            process = await asyncio.create_subprocess_exec(
+                "adb", "-s", self._device_id, "shell", "input", "swipe",
+                str(start_x), str(start_y),
+                str(end_x), str(end_y),
+                str(duration_ms),
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE
+            )
+            stdout, stderr = await process.communicate()
+            
+            if process.returncode != 0:
+                raise DeviceError(f"滑动失败: {stderr.decode()}")
+                
+            # 等待滑动完成
+            await asyncio.sleep(duration)
+            
+        except Exception as e:
+            raise DeviceError(f"滑动失败: {str(e)}")
+            
+    async def get_resolution(self) -> Tuple[int, int]:
+        """获取屏幕分辨率
         
         Returns:
-            bool: Whether device is connected
+            Tuple[int, int]: (宽度, 高度)
         """
-        return self.connected
-
-    def get_ui_automator(self) -> Optional[UIAutomator]:
-        """Get UI automator
+        return self._resolution
+        
+    async def is_connected(self) -> bool:
+        """检查设备是否已连接
         
         Returns:
-            Optional[UIAutomator]: UI automator instance or None if not connected
+            bool: 是否已连接
         """
-        return self.ui_automator if self.connected else None
-
-    @property
-    def active_operations_count(self) -> int:
-        """Get current active operations count
-        
-        Returns:
-            int: Active operations count
-        """
-        return len(self._active_operations)
-
-    @property
-    def queued_operations_count(self) -> int:
-        """Get queued operations count
-        
-        Returns:
-            int: Queued operations count
-        """
-        return len(self._operation_queue)
+        return self._connected

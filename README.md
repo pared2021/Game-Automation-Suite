@@ -135,3 +135,24 @@ This project is licensed under the MIT License. See the `LICENSE` file for detai
 - Improved internationalization support
 - Optimized dependency management
 - Added comprehensive test coverage reporting
+
+## Project Entry Points
+
+The project provides multiple entry points for different use cases:
+
+1. **GUI Interface** (Recommended for most users)
+   ```
+   python main.py
+   ```
+
+2. **Command Line Interface** (For advanced users and automation)
+   ```
+   python -m utils.cli
+   ```
+
+3. **Game Engine Only** (For headless operation)
+   ```
+   python -m game_automation.start_game_engine
+   ```
+
+Choose the appropriate entry point based on your needs. The GUI interface provides the most comprehensive control and visualization features.

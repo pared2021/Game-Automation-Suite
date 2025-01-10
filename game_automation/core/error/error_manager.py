@@ -1,227 +1,447 @@
-from typing import Any, Dict, List, Optional, Type
+from typing import Dict, List, Optional, Any, Callable
+from pathlib import Path
+import json
+import logging
 import traceback
-import sys
 from datetime import datetime
-from enum import Enum
-from ..base.service_base import ServiceBase
-
-class ErrorSeverity(Enum):
-    """Error severity levels."""
-    DEBUG = 0
-    INFO = 1
-    WARNING = 2
-    ERROR = 3
-    CRITICAL = 4
+from enum import Enum, auto
+import asyncio
 
 class ErrorCategory(Enum):
-    """Error categories."""
-    SYSTEM = "system"
-    NETWORK = "network"
-    DATABASE = "database"
-    CONFIGURATION = "configuration"
-    AUTHENTICATION = "authentication"
-    AUTHORIZATION = "authorization"
-    VALIDATION = "validation"
-    BUSINESS_LOGIC = "business_logic"
-    EXTERNAL_SERVICE = "external_service"
-    UNKNOWN = "unknown"
+    """错误类别"""
+    SYSTEM = auto()      # 系统错误
+    NETWORK = auto()     # 网络错误
+    DEVICE = auto()      # 设备错误
+    GAME = auto()        # 游戏错误
+    TASK = auto()        # 任务错误
+    SCENE = auto()       # 场景错误
+    USER = auto()        # 用户错误
+    UNKNOWN = auto()     # 未知错误
+
+class ErrorSeverity(Enum):
+    """错误严重程度"""
+    INFO = 0        # 信息
+    WARNING = 1     # 警告
+    ERROR = 2       # 错误
+    CRITICAL = 3    # 严重
+
+class ErrorState(Enum):
+    """错误状态"""
+    NEW = auto()        # 新错误
+    PROCESSING = auto() # 处理中
+    RESOLVED = auto()   # 已解决
+    IGNORED = auto()    # 已忽略
 
 class GameAutomationError(Exception):
-    """Base exception class for game automation errors."""
-    
-    def __init__(self, message: str, error_code: str,
-                 severity: ErrorSeverity = ErrorSeverity.ERROR,
-                 category: ErrorCategory = ErrorCategory.UNKNOWN,
-                 original_error: Optional[Exception] = None):
+    """游戏自动化错误"""
+    def __init__(
+        self,
+        message: str,
+        error_code: str = None,
+        category: ErrorCategory = ErrorCategory.UNKNOWN,
+        severity: ErrorSeverity = ErrorSeverity.ERROR,
+        original_error: Exception = None,
+        context: Dict = None
+    ):
         super().__init__(message)
         self.error_code = error_code
-        self.severity = severity
         self.category = category
-        self.timestamp = datetime.now()
+        self.severity = severity
         self.original_error = original_error
-        self.traceback = traceback.extract_tb(sys.exc_info()[2]) if original_error else None
-    
-    def to_dict(self) -> Dict[str, Any]:
-        """Convert error to dictionary."""
-        return {
-            'message': str(self),
-            'error_code': self.error_code,
-            'severity': self.severity.name,
-            'category': self.category.value,
-            'timestamp': self.timestamp.isoformat(),
-            'original_error': str(self.original_error) if self.original_error else None,
-            'traceback': [str(frame) for frame in self.traceback] if self.traceback else None
-        }
+        self.context = context or {}
+        self.timestamp = datetime.now()
+        self.state = ErrorState.NEW
+        self.stack_trace = traceback.format_exc()
 
-class ErrorManager(ServiceBase):
-    """Centralized error management service."""
+class ErrorHandler:
+    """错误处理器"""
+    def __init__(
+        self,
+        category: ErrorCategory,
+        severity: ErrorSeverity,
+        handler: Callable,
+        priority: int = 0
+    ):
+        self.category = category
+        self.severity = severity
+        self.handler = handler
+        self.priority = priority
+
+class ErrorManager:
+    """错误管理器"""
     
     def __init__(self):
-        super().__init__("ErrorManager")
-        self._error_handlers: Dict[Type[Exception], List[callable]] = {}
-        self._error_history: List[GameAutomationError] = []
-        self._max_history = 1000
-        self._error_codes: Dict[str, Dict[str, Any]] = {}
-        self._initialize_error_codes()
-    
-    def _initialize_error_codes(self) -> None:
-        """Initialize standard error codes."""
-        self._error_codes = {
-            'SYS001': {'message': 'System initialization error', 'category': ErrorCategory.SYSTEM},
-            'NET001': {'message': 'Network connection error', 'category': ErrorCategory.NETWORK},
-            'CFG001': {'message': 'Configuration error', 'category': ErrorCategory.CONFIGURATION},
-            'AUTH001': {'message': 'Authentication error', 'category': ErrorCategory.AUTHENTICATION},
-            'VAL001': {'message': 'Validation error', 'category': ErrorCategory.VALIDATION},
-            'SVC001': {'message': 'External service error', 'category': ErrorCategory.EXTERNAL_SERVICE}
-        }
-    
-    def register_error_code(self, code: str, message: str,
-                          category: ErrorCategory = ErrorCategory.UNKNOWN) -> None:
-        """Register a new error code."""
-        if code in self._error_codes:
-            self.log_warning(f"Error code {code} already exists and will be overwritten")
+        self._initialized = False
+        self._config = None
+        self._handlers: Dict[ErrorCategory, List[ErrorHandler]] = {}
+        self._errors: List[GameAutomationError] = []
+        self._max_errors = 1000  # 最大错误数
         
-        self._error_codes[code] = {
-            'message': message,
-            'category': category
-        }
-        self.log_debug(f"Registered error code: {code}")
-    
-    def register_handler(self, error_type: Type[Exception], handler: callable) -> None:
-        """Register an error handler for a specific exception type."""
-        if error_type not in self._error_handlers:
-            self._error_handlers[error_type] = []
-        self._error_handlers[error_type].append(handler)
-        self.log_debug(f"Registered handler for {error_type.__name__}")
-    
-    def unregister_handler(self, error_type: Type[Exception], handler: callable) -> None:
-        """Unregister an error handler."""
-        if error_type in self._error_handlers:
-            self._error_handlers[error_type].remove(handler)
-            if not self._error_handlers[error_type]:
-                del self._error_handlers[error_type]
-            self.log_debug(f"Unregistered handler for {error_type.__name__}")
-    
-    async def handle_error(self, error: Exception, context: Optional[Dict[str, Any]] = None) -> None:
-        """Handle an error with registered handlers."""
-        handled = False
-        
-        # Convert to GameAutomationError if it's not already
-        if not isinstance(error, GameAutomationError):
-            error = self._convert_error(error)
-        
-        # Add to history
-        self._add_to_history(error)
-        
-        # Find and execute handlers
-        for error_type, handlers in self._error_handlers.items():
-            if isinstance(error, error_type):
-                for handler in handlers:
-                    try:
-                        if context:
-                            await handler(error, context)
-                        else:
-                            await handler(error)
-                        handled = True
-                    except Exception as e:
-                        self.log_error(f"Error in error handler: {str(e)}", e)
-        
-        if not handled:
-            self.log_error(f"Unhandled error: {str(error)}")
-            # Re-raise if critical
-            if isinstance(error, GameAutomationError) and error.severity == ErrorSeverity.CRITICAL:
-                raise error
-    
-    def _convert_error(self, error: Exception) -> GameAutomationError:
-        """Convert a standard exception to GameAutomationError."""
-        error_code = 'SYS999'  # Default error code
-        category = ErrorCategory.UNKNOWN
-        severity = ErrorSeverity.ERROR
-        
-        # Determine appropriate error categorization based on exception type
-        if isinstance(error, (ConnectionError, TimeoutError)):
-            error_code = 'NET001'
-            category = ErrorCategory.NETWORK
-        elif isinstance(error, ValueError):
-            error_code = 'VAL001'
-            category = ErrorCategory.VALIDATION
-        elif isinstance(error, PermissionError):
-            error_code = 'AUTH001'
-            category = ErrorCategory.AUTHORIZATION
-        
-        return GameAutomationError(
-            message=str(error),
-            error_code=error_code,
-            category=category,
-            severity=severity,
-            original_error=error
+    async def initialize(self):
+        """初始化管理器"""
+        if not self._initialized:
+            try:
+                # 加载配置
+                config_path = Path("config/config.json")
+                if not config_path.exists():
+                    raise GameAutomationError(
+                        message="配置文件不存在",
+                        error_code="ERR001",
+                        category=ErrorCategory.SYSTEM,
+                        severity=ErrorSeverity.CRITICAL
+                    )
+                    
+                with open(config_path, "r", encoding="utf-8") as f:
+                    self._config = json.load(f)
+                    
+                # 注册默认处理器
+                self._register_default_handlers()
+                
+                self._initialized = True
+                
+            except Exception as e:
+                raise GameAutomationError(
+                    message=f"初始化失败: {str(e)}",
+                    error_code="ERR002",
+                    category=ErrorCategory.SYSTEM,
+                    severity=ErrorSeverity.CRITICAL,
+                    original_error=e
+                )
+                
+    def _register_default_handlers(self):
+        """注册默认处理器"""
+        # 系统错误处理器
+        self.register_handler(
+            ErrorCategory.SYSTEM,
+            ErrorSeverity.CRITICAL,
+            self._handle_system_error
         )
-    
-    def _add_to_history(self, error: GameAutomationError) -> None:
-        """Add error to history."""
-        self._error_history.append(error)
-        if len(self._error_history) > self._max_history:
-            self._error_history.pop(0)
-    
-    def get_error_history(self, severity: Optional[ErrorSeverity] = None,
-                         category: Optional[ErrorCategory] = None,
-                         start_time: Optional[datetime] = None,
-                         end_time: Optional[datetime] = None) -> List[GameAutomationError]:
-        """Get error history with optional filtering."""
-        errors = self._error_history
         
-        if severity:
-            errors = [e for e in errors if e.severity == severity]
+        # 网络错误处理器
+        self.register_handler(
+            ErrorCategory.NETWORK,
+            ErrorSeverity.ERROR,
+            self._handle_network_error
+        )
+        
+        # 设备错误处理器
+        self.register_handler(
+            ErrorCategory.DEVICE,
+            ErrorSeverity.ERROR,
+            self._handle_device_error
+        )
+        
+        # 游戏错误处理器
+        self.register_handler(
+            ErrorCategory.GAME,
+            ErrorSeverity.ERROR,
+            self._handle_game_error
+        )
+        
+    async def _handle_system_error(self, error: GameAutomationError):
+        """处理系统错误"""
+        # 记录错误
+        logging.critical(
+            f"系统错误: {error.message}\n"
+            f"错误代码: {error.error_code}\n"
+            f"堆栈跟踪:\n{error.stack_trace}"
+        )
+        
+        # 尝试恢复
+        if error.severity == ErrorSeverity.CRITICAL:
+            # 触发紧急停止
+            await self._emergency_stop()
+            
+    async def _handle_network_error(self, error: GameAutomationError):
+        """处理网络错误"""
+        # 记录错误
+        logging.error(
+            f"网络错误: {error.message}\n"
+            f"错误代码: {error.error_code}"
+        )
+        
+        # 尝试重连
+        retry_count = 3
+        retry_interval = 1.0
+        
+        for i in range(retry_count):
+            try:
+                # TODO: 实现网络重连
+                await asyncio.sleep(retry_interval)
+                return
+                
+            except Exception as e:
+                if i == retry_count - 1:
+                    error.state = ErrorState.ERROR
+                    raise GameAutomationError(
+                        message="网络重连失败",
+                        error_code="ERR003",
+                        category=ErrorCategory.NETWORK,
+                        severity=ErrorSeverity.CRITICAL,
+                        original_error=e
+                    )
+                    
+    async def _handle_device_error(self, error: GameAutomationError):
+        """处理设备错误"""
+        # 记录错误
+        logging.error(
+            f"设备错误: {error.message}\n"
+            f"错误代码: {error.error_code}"
+        )
+        
+        # 尝试重启设备
+        try:
+            # TODO: 实现设备重启
+            await asyncio.sleep(1.0)
+            
+        except Exception as e:
+            error.state = ErrorState.ERROR
+            raise GameAutomationError(
+                message="设备重启失败",
+                error_code="ERR004",
+                category=ErrorCategory.DEVICE,
+                severity=ErrorSeverity.CRITICAL,
+                original_error=e
+            )
+            
+    async def _handle_game_error(self, error: GameAutomationError):
+        """处理游戏错误"""
+        # 记录错误
+        logging.error(
+            f"游戏错误: {error.message}\n"
+            f"错误代码: {error.error_code}"
+        )
+        
+        # 尝试重启游戏
+        try:
+            # TODO: 实现游戏重启
+            await asyncio.sleep(1.0)
+            
+        except Exception as e:
+            error.state = ErrorState.ERROR
+            raise GameAutomationError(
+                message="游戏重启失败",
+                error_code="ERR005",
+                category=ErrorCategory.GAME,
+                severity=ErrorSeverity.CRITICAL,
+                original_error=e
+            )
+            
+    async def _emergency_stop(self):
+        """紧急停止"""
+        try:
+            # 停止所有任务
+            # TODO: 实现任务停止
+            
+            # 保存状态
+            await self._save_state()
+            
+            # 记录日志
+            logging.critical("系统紧急停止")
+            
+        except Exception as e:
+            logging.critical(f"紧急停止失败: {str(e)}")
+            
+    async def _save_state(self):
+        """保存状态"""
+        try:
+            # 创建状态目录
+            state_dir = Path(self._config["paths"]["logs"]) / "error_state"
+            state_dir.mkdir(parents=True, exist_ok=True)
+            
+            # 生成文件名
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            state_path = state_dir / f"error_state_{timestamp}.json"
+            
+            # 保存状态
+            state = {
+                'errors': [
+                    {
+                        'message': error.message,
+                        'error_code': error.error_code,
+                        'category': error.category.name,
+                        'severity': error.severity.name,
+                        'state': error.state.name,
+                        'context': error.context,
+                        'timestamp': error.timestamp.isoformat(),
+                        'stack_trace': error.stack_trace
+                    }
+                    for error in self._errors
+                ],
+                'timestamp': datetime.now().isoformat()
+            }
+            
+            with open(state_path, "w", encoding="utf-8") as f:
+                json.dump(state, f, indent=2, ensure_ascii=False)
+                
+        except Exception as e:
+            logging.error(f"保存状态失败: {str(e)}")
+            
+    def register_handler(
+        self,
+        category: ErrorCategory,
+        severity: ErrorSeverity,
+        handler: Callable,
+        priority: int = 0
+    ):
+        """注册错误处理器
+        
+        Args:
+            category: 错误类别
+            severity: 错误严重程度
+            handler: 处理函数
+            priority: 优先级
+        """
+        if category not in self._handlers:
+            self._handlers[category] = []
+            
+        error_handler = ErrorHandler(category, severity, handler, priority)
+        self._handlers[category].append(error_handler)
+        
+        # 按优先级排序
+        self._handlers[category].sort(key=lambda x: x.priority, reverse=True)
+        
+    async def handle_error(self, error: GameAutomationError):
+        """处理错误
+        
+        Args:
+            error: 错误对象
+        """
+        if not self._initialized:
+            raise GameAutomationError(
+                message="错误管理器未初始化",
+                error_code="ERR006",
+                category=ErrorCategory.SYSTEM,
+                severity=ErrorSeverity.CRITICAL
+            )
+            
+        try:
+            # 添加到错误列表
+            self._errors.append(error)
+            
+            # 限制错误数量
+            if len(self._errors) > self._max_errors:
+                self._errors.pop(0)
+                
+            # 查找处理器
+            handlers = self._handlers.get(error.category, [])
+            
+            # 执行处理器
+            for handler in handlers:
+                if handler.severity <= error.severity:
+                    try:
+                        await handler.handler(error)
+                        error.state = ErrorState.RESOLVED
+                        return
+                        
+                    except Exception as e:
+                        logging.error(f"错误处理失败: {str(e)}")
+                        error.state = ErrorState.ERROR
+                        continue
+                        
+            # 如果没有处理器处理
+            if error.state == ErrorState.NEW:
+                error.state = ErrorState.IGNORED
+                
+        except Exception as e:
+            logging.error(f"错误处理失败: {str(e)}")
+            
+    async def get_errors(
+        self,
+        category: ErrorCategory = None,
+        severity: ErrorSeverity = None,
+        state: ErrorState = None,
+        start_time: datetime = None,
+        end_time: datetime = None
+    ) -> List[GameAutomationError]:
+        """获取错误列表
+        
+        Args:
+            category: 错误类别
+            severity: 错误严重程度
+            state: 错误状态
+            start_time: 开始时间
+            end_time: 结束时间
+            
+        Returns:
+            List[GameAutomationError]: 错误列表
+        """
+        if not self._initialized:
+            raise GameAutomationError(
+                message="错误管理器未初始化",
+                error_code="ERR007",
+                category=ErrorCategory.SYSTEM,
+                severity=ErrorSeverity.CRITICAL
+            )
+            
+        errors = self._errors
         
         if category:
-            errors = [e for e in errors if e.category == category]
-        
+            errors = [
+                error
+                for error in errors
+                if error.category == category
+            ]
+            
+        if severity:
+            errors = [
+                error
+                for error in errors
+                if error.severity == severity
+            ]
+            
+        if state:
+            errors = [
+                error
+                for error in errors
+                if error.state == state
+            ]
+            
         if start_time:
-            errors = [e for e in errors if e.timestamp >= start_time]
-        
+            errors = [
+                error
+                for error in errors
+                if error.timestamp >= start_time
+            ]
+            
         if end_time:
-            errors = [e for e in errors if e.timestamp <= end_time]
-        
+            errors = [
+                error
+                for error in errors
+                if error.timestamp <= end_time
+            ]
+            
         return errors
-    
-    def clear_error_history(self) -> None:
-        """Clear error history."""
-        self._error_history.clear()
-        self.log_info("Error history cleared")
-    
-    async def process(self, input_data: Dict[str, Any]) -> Any:
-        """Process error-related requests."""
-        action = input_data.get('action')
         
-        if action == 'get_history':
-            severity = input_data.get('severity')
-            category = input_data.get('category')
-            start_time = input_data.get('start_time')
-            end_time = input_data.get('end_time')
+    async def clear_errors(
+        self,
+        category: ErrorCategory = None,
+        severity: ErrorSeverity = None,
+        state: ErrorState = None
+    ):
+        """清理错误
+        
+        Args:
+            category: 错误类别
+            severity: 错误严重程度
+            state: 错误状态
+        """
+        if not self._initialized:
+            raise GameAutomationError(
+                message="错误管理器未初始化",
+                error_code="ERR008",
+                category=ErrorCategory.SYSTEM,
+                severity=ErrorSeverity.CRITICAL
+            )
             
-            if severity:
-                severity = ErrorSeverity[severity.upper()]
-            if category:
-                category = ErrorCategory(category.lower())
-            if start_time:
-                start_time = datetime.fromisoformat(start_time)
-            if end_time:
-                end_time = datetime.fromisoformat(end_time)
+        if not any([category, severity, state]):
+            self._errors.clear()
+            return
             
-            errors = self.get_error_history(severity, category, start_time, end_time)
-            return {'status': 'success', 'errors': [e.to_dict() for e in errors]}
-        
-        elif action == 'clear_history':
-            self.clear_error_history()
-            return {'status': 'success', 'message': 'Error history cleared'}
-        
-        else:
-            raise ValueError(f"Unsupported action: {action}")
-    
-    async def validate(self, data: Any) -> bool:
-        """Validate error-related request data."""
-        if not isinstance(data, dict):
-            return False
-        
-        required_fields = ['action']
-        return all(field in data for field in required_fields)
+        self._errors = [
+            error
+            for error in self._errors
+            if (category and error.category != category) or
+               (severity and error.severity != severity) or
+               (state and error.state != state)
+        ]

@@ -1,309 +1,411 @@
-import cv2
-import numpy as np
-from typing import Dict, List, Optional, Tuple
-import os
+from typing import Dict, List, Optional, Any, Tuple
+from pathlib import Path
+import asyncio
+import json
+import logging
 from datetime import datetime
-from collections import deque
 
-from .scene_analyzer import SceneAnalyzer, SceneAnalysisError
-from utils.logger import detailed_logger
+from PIL import Image
+import numpy as np
+import cv2
+from sklearn.metrics.pairwise import cosine_similarity
+import torch
+import torch.nn as nn
+import torchvision.models as models
+import torchvision.transforms as transforms
 
-class AdvancedSceneAnalyzer(SceneAnalyzer):
-    """高级场景分析器，提供更复杂的场景分析功能"""
+class SceneAnalyzerError(Exception):
+    """场景分析器错误"""
+    pass
 
-    def __init__(self, template_dir: str = "resources/templates", history_size: int = 10):
-        """初始化高级场景分析器
+class SceneElement:
+    """场景元素"""
+    def __init__(
+        self,
+        element_id: str,
+        element_type: str,
+        bounds: Dict[str, int],
+        confidence: float,
+        properties: Dict = None
+    ):
+        self.element_id = element_id
+        self.element_type = element_type
+        self.bounds = bounds
+        self.confidence = confidence
+        self.properties = properties or {}
         
-        Args:
-            template_dir: 模板图片目录
-            history_size: 保存的场景历史记录数量
-        """
-        super().__init__(template_dir)
-        self.scene_history = deque(maxlen=history_size)
-        self.feature_detector = cv2.SIFT_create()
-        self.feature_matcher = cv2.BFMatcher(cv2.NORM_L2, crossCheck=True)
-
-    def analyze_screenshot(self, screenshot: np.ndarray) -> Dict[str, any]:
-        """增强的场景分析
+    def to_dict(self) -> Dict:
+        """转换为字典
         
-        Args:
-            screenshot: OpenCV格式的截图
-
         Returns:
-            Dict: 详细的分析结果
+            Dict: 元素信息字典
         """
-        # 获取基础分析结果
-        base_result = super().analyze_screenshot(screenshot)
-        
-        # 添加高级分析结果
-        advanced_result = {
-            **base_result,
-            'features': self._extract_features(screenshot),
-            'motion': self._detect_motion(),
-            'objects': self._detect_objects(screenshot),
-            'text_regions': self._detect_text_regions(screenshot)
+        return {
+            'id': self.element_id,
+            'type': self.element_type,
+            'bounds': self.bounds,
+            'confidence': self.confidence,
+            'properties': self.properties
         }
-        
-        # 更新场景历史
-        self.scene_history.append({
-            'timestamp': datetime.now(),
-            'scene_type': advanced_result['scene_type'],
-            'features': advanced_result['features']
-        })
-        
-        return advanced_result
 
-    def _extract_features(self, image: np.ndarray) -> Dict[str, any]:
-        """提取图像特征
+class AdvancedSceneAnalyzer:
+    """高级场景分析器"""
+    
+    def __init__(self):
+        self._initialized = False
+        self._config = None
+        self._templates: Dict[str, Image.Image] = {}
+        self._features: Dict[str, np.ndarray] = {}
+        self._scene_cache: Dict[str, Dict] = {}
+        self._feature_extractor = None
+        self._classifier = None
+        
+    async def initialize(self):
+        """初始化分析器"""
+        if not self._initialized:
+            try:
+                # 加载配置
+                config_path = Path("config/config.json")
+                if not config_path.exists():
+                    raise SceneAnalyzerError("配置文件不存在")
+                    
+                with open(config_path, "r", encoding="utf-8") as f:
+                    self._config = json.load(f)
+                    
+                # 加载模板
+                await self._load_templates()
+                
+                # 初始化特征提取器
+                self._feature_extractor = models.resnet18(pretrained=True)
+                self._feature_extractor.fc = nn.Identity()  # 移除最后的全连接层
+                self._feature_extractor.eval()
+                
+                # 初始化分类器
+                self._classifier = models.resnet18(pretrained=True)
+                num_classes = len(self._templates)
+                self._classifier.fc = nn.Linear(512, num_classes)
+                self._classifier.eval()
+                
+                # 提取特征
+                await self._extract_features()
+                
+                self._initialized = True
+                
+            except Exception as e:
+                raise SceneAnalyzerError(f"初始化失败: {str(e)}")
+                
+    async def cleanup(self):
+        """清理资源"""
+        if self._initialized:
+            self._templates.clear()
+            self._features.clear()
+            self._scene_cache.clear()
+            self._initialized = False
+            
+    async def _load_templates(self):
+        """加载模板图片"""
+        try:
+            template_dir = Path(self._config["paths"]["templates"])
+            if not template_dir.exists():
+                raise SceneAnalyzerError("模板目录不存在")
+                
+            # 加载所有PNG文件
+            for template_path in template_dir.glob("**/*.png"):
+                template_id = template_path.stem
+                template = Image.open(template_path)
+                self._templates[template_id] = template
+                
+        except Exception as e:
+            raise SceneAnalyzerError(f"加载模板失败: {str(e)}")
+            
+    async def _extract_features(self):
+        """提取特征"""
+        try:
+            transform = transforms.Compose([
+                transforms.Resize(256),
+                transforms.CenterCrop(224),
+                transforms.ToTensor(),
+                transforms.Normalize(
+                    mean=[0.485, 0.456, 0.406],
+                    std=[0.229, 0.224, 0.225]
+                )
+            ])
+            
+            for template_id, template in self._templates.items():
+                # 转换图像
+                tensor = transform(template).unsqueeze(0)
+                
+                # 提取特征
+                with torch.no_grad():
+                    features = self._feature_extractor(tensor)
+                    
+                self._features[template_id] = features.numpy()
+                
+        except Exception as e:
+            raise SceneAnalyzerError(f"提取特征失败: {str(e)}")
+            
+    async def analyze_scene(
+        self,
+        screenshot: Image.Image
+    ) -> Dict[str, Any]:
+        """分析场景
         
         Args:
-            image: 图像数据
-
+            screenshot: 屏幕截图
+            
         Returns:
-            Dict: 特征信息
+            Dict[str, Any]: 场景信息
         """
-        try:
-            # 转换为灰度图
-            gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
-            
-            # 提取SIFT特征
-            keypoints, descriptors = self.feature_detector.detectAndCompute(gray, None)
-            
-            # 计算颜色直方图
-            color_hist = self._calculate_color_histogram(image)
-            
-            # 计算边缘密度
-            edges = cv2.Canny(gray, 100, 200)
-            edge_density = np.mean(edges > 0)
-            
-            return {
-                'keypoint_count': len(keypoints) if keypoints is not None else 0,
-                'color_distribution': color_hist,
-                'edge_density': float(edge_density)
-            }
-            
-        except Exception as e:
-            detailed_logger.error(f"特征提取失败: {str(e)}")
-            return {
-                'keypoint_count': 0,
-                'color_distribution': [],
-                'edge_density': 0.0
-            }
-
-    def _detect_motion(self) -> Dict[str, float]:
-        """检测场景变化中的运动
-        
-        Returns:
-            Dict: 运动信息
-        """
-        if len(self.scene_history) < 2:
-            return {'motion_level': 0.0, 'direction': None}
+        if not self._initialized:
+            raise SceneAnalyzerError("未初始化")
             
         try:
-            # 获取最近两个场景的特征
-            current = self.scene_history[-1]['features']
-            previous = self.scene_history[-2]['features']
+            # 转换图像
+            scene_array = np.array(screenshot)
             
-            # 计算特征变化
-            feature_change = abs(current['keypoint_count'] - previous['keypoint_count'])
-            edge_change = abs(current['edge_density'] - previous['edge_density'])
+            # 场景分类
+            scene_type = await self._classify_scene(scene_array)
             
-            # 综合评估运动水平
-            motion_level = (feature_change / max(current['keypoint_count'], 1) + edge_change) / 2
+            # 元素检测
+            elements = await self._detect_elements(scene_array)
             
-            return {
-                'motion_level': float(motion_level),
-                'direction': self._estimate_motion_direction()
+            # 计算置信度
+            confidence = await self._calculate_confidence(scene_type, elements)
+            
+            # 缓存结果
+            scene_info = {
+                'type': scene_type,
+                'elements': {
+                    e.element_id: e.to_dict()
+                    for e in elements
+                },
+                'confidence': confidence,
+                'timestamp': datetime.now().isoformat()
             }
+            self._scene_cache[scene_type] = scene_info
+            
+            return scene_info
             
         except Exception as e:
-            detailed_logger.error(f"运动检测失败: {str(e)}")
-            return {'motion_level': 0.0, 'direction': None}
-
-    def _detect_objects(self, image: np.ndarray) -> List[Dict[str, any]]:
-        """检测图像中的对象
+            logging.error(f"场景分析失败: {str(e)}")
+            return {
+                'type': 'unknown',
+                'elements': {},
+                'confidence': 0.0,
+                'error': str(e)
+            }
+            
+    async def _classify_scene(
+        self,
+        scene_array: np.ndarray
+    ) -> str:
+        """场景分类
         
         Args:
-            image: 图像数据
-
+            scene_array: 场景图像数组
+            
         Returns:
-            List[Dict]: 检测到的对象列表
+            str: 场景类型
         """
         try:
+            # 转换图像
+            scene = Image.fromarray(scene_array)
+            transform = transforms.Compose([
+                transforms.Resize(256),
+                transforms.CenterCrop(224),
+                transforms.ToTensor(),
+                transforms.Normalize(
+                    mean=[0.485, 0.456, 0.406],
+                    std=[0.229, 0.224, 0.225]
+                )
+            ])
+            tensor = transform(scene).unsqueeze(0)
+            
+            # 提取特征
+            with torch.no_grad():
+                features = self._feature_extractor(tensor)
+                
+            # 计算相似度
+            max_similarity = -1
+            best_match = 'unknown'
+            
+            for template_id, template_features in self._features.items():
+                similarity = cosine_similarity(
+                    features.numpy().reshape(1, -1),
+                    template_features.reshape(1, -1)
+                )[0][0]
+                
+                if similarity > max_similarity:
+                    max_similarity = similarity
+                    best_match = template_id
+                    
+            # 检查置信度
+            threshold = self._config["scene"]["match_threshold"]
+            if max_similarity < threshold:
+                return 'unknown'
+                
+            return best_match
+            
+        except Exception as e:
+            logging.error(f"场景分类失败: {str(e)}")
+            return 'unknown'
+            
+    async def _detect_elements(
+        self,
+        scene_array: np.ndarray
+    ) -> List[SceneElement]:
+        """检测元素
+        
+        Args:
+            scene_array: 场景图像数组
+            
+        Returns:
+            List[SceneElement]: 元素列表
+        """
+        try:
+            elements = []
+            
             # 转换为灰度图
-            gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+            gray = cv2.cvtColor(scene_array, cv2.COLOR_RGB2GRAY)
             
-            # 使用级联分类器检测物体
-            objects = []
+            # 遍历模板
+            for template_id, template in self._templates.items():
+                # 转换模板
+                template_array = np.array(template)
+                template_gray = cv2.cvtColor(template_array, cv2.COLOR_RGB2GRAY)
+                
+                # 模板匹配
+                result = cv2.matchTemplate(
+                    gray,
+                    template_gray,
+                    cv2.TM_CCOEFF_NORMED
+                )
+                
+                # 查找匹配位置
+                threshold = self._config["scene"]["match_threshold"]
+                locations = np.where(result >= threshold)
+                
+                for pt in zip(*locations[::-1]):
+                    # 计算边界
+                    bounds = {
+                        'left': int(pt[0]),
+                        'top': int(pt[1]),
+                        'right': int(pt[0] + template_array.shape[1]),
+                        'bottom': int(pt[1] + template_array.shape[0])
+                    }
+                    
+                    # 创建元素
+                    element = SceneElement(
+                        element_id=f"{template_id}_{len(elements)}",
+                        element_type=template_id,
+                        bounds=bounds,
+                        confidence=float(result[pt[1], pt[0]])
+                    )
+                    
+                    elements.append(element)
+                    
+            return elements
             
-            # 阈值化
-            _, binary = cv2.threshold(gray, 127, 255, cv2.THRESH_BINARY)
+        except Exception as e:
+            logging.error(f"元素检测失败: {str(e)}")
+            return []
             
-            # 查找轮廓
-            contours, _ = cv2.findContours(
-                binary,
-                cv2.RETR_EXTERNAL,
-                cv2.CHAIN_APPROX_SIMPLE
-            )
+    async def _calculate_confidence(
+        self,
+        scene_type: str,
+        elements: List[SceneElement]
+    ) -> float:
+        """计算置信度
+        
+        Args:
+            scene_type: 场景类型
+            elements: 元素列表
             
-            for contour in contours:
-                # 计算轮廓特征
-                area = cv2.contourArea(contour)
-                if area < 100:  # 过滤小物体
+        Returns:
+            float: 置信度
+        """
+        try:
+            # 如果场景未知
+            if scene_type == 'unknown':
+                return 0.0
+                
+            # 如果没有元素
+            if not elements:
+                return 0.0
+                
+            # 计算平均置信度
+            confidences = [
+                element.confidence
+                for element in elements
+                if element.element_type == scene_type
+            ]
+            
+            if not confidences:
+                return 0.0
+                
+            return sum(confidences) / len(confidences)
+            
+        except Exception as e:
+            logging.error(f"计算置信度失败: {str(e)}")
+            return 0.0
+            
+    async def get_element(
+        self,
+        element_id: str,
+        scene_type: str = None
+    ) -> Optional[Dict]:
+        """获取元素信息
+        
+        Args:
+            element_id: 元素ID
+            scene_type: 场景类型
+            
+        Returns:
+            Optional[Dict]: 元素信息
+        """
+        if scene_type and scene_type in self._scene_cache:
+            scene = self._scene_cache[scene_type]
+            return scene['elements'].get(element_id)
+            
+        for scene in self._scene_cache.values():
+            if element_id in scene['elements']:
+                return scene['elements'][element_id]
+                
+        return None
+        
+    async def find_elements(
+        self,
+        element_type: str = None,
+        min_confidence: float = 0.0,
+        **filters
+    ) -> List[Dict]:
+        """查找元素
+        
+        Args:
+            element_type: 元素类型
+            min_confidence: 最小置信度
+            **filters: 过滤条件
+            
+        Returns:
+            List[Dict]: 元素列表
+        """
+        elements = []
+        
+        for scene in self._scene_cache.values():
+            for element in scene['elements'].values():
+                if element_type and element['type'] != element_type:
                     continue
                     
-                x, y, w, h = cv2.boundingRect(contour)
-                aspect_ratio = float(w) / h
-                
-                objects.append({
-                    'position': (x, y),
-                    'size': (w, h),
-                    'area': area,
-                    'aspect_ratio': aspect_ratio
-                })
-            
-            return objects
-            
-        except Exception as e:
-            detailed_logger.error(f"物体检测失败: {str(e)}")
-            return []
-
-    def _detect_text_regions(self, image: np.ndarray) -> List[Dict[str, any]]:
-        """检测可能包含文本的区域
-        
-        Args:
-            image: 图像数据
-
-        Returns:
-            List[Dict]: 文本区域列表
-        """
-        try:
-            # 转换为灰度图
-            gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
-            
-            # 自适应阈值化
-            binary = cv2.adaptiveThreshold(
-                gray,
-                255,
-                cv2.ADAPTIVE_THRESH_GAUSSIAN_C,
-                cv2.THRESH_BINARY_INV,
-                11,
-                2
-            )
-            
-            # 查找文本区域
-            kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (15, 3))
-            dilated = cv2.dilate(binary, kernel, iterations=1)
-            
-            contours, _ = cv2.findContours(
-                dilated,
-                cv2.RETR_EXTERNAL,
-                cv2.CHAIN_APPROX_SIMPLE
-            )
-            
-            text_regions = []
-            for contour in contours:
-                x, y, w, h = cv2.boundingRect(contour)
-                aspect_ratio = float(w) / h
-                
-                # 使用启发式规则过滤可能的文本区域
-                if 2.0 < aspect_ratio < 10.0 and h > 8:
-                    text_regions.append({
-                        'position': (x, y),
-                        'size': (w, h),
-                        'confidence': self._calculate_text_confidence(gray[y:y+h, x:x+w])
-                    })
-            
-            return text_regions
-            
-        except Exception as e:
-            detailed_logger.error(f"文本区域检测失败: {str(e)}")
-            return []
-
-    def _calculate_color_histogram(self, image: np.ndarray) -> List[float]:
-        """计算颜色直方图
-        
-        Args:
-            image: 图像数据
-
-        Returns:
-            List[float]: 归一化的直方图数据
-        """
-        try:
-            hist = cv2.calcHist([image], [0, 1, 2], None, [8, 8, 8], [0, 256, 0, 256, 0, 256])
-            hist = cv2.normalize(hist, hist).flatten().tolist()
-            return hist
-        except Exception as e:
-            detailed_logger.error(f"颜色直方图计算失败: {str(e)}")
-            return []
-
-    def _estimate_motion_direction(self) -> Optional[str]:
-        """估计运动方向
-        
-        Returns:
-            Optional[str]: 运动方向描述
-        """
-        if len(self.scene_history) < 2:
-            return None
-            
-        try:
-            current = self.scene_history[-1]
-            previous = self.scene_history[-2]
-            
-            # 比较特征变化来推测方向
-            current_features = current['features']
-            previous_features = previous['features']
-            
-            # 简单的启发式方向判断
-            if current_features['edge_density'] > previous_features['edge_density']:
-                return 'approaching'
-            elif current_features['edge_density'] < previous_features['edge_density']:
-                return 'receding'
-            else:
-                return 'static'
-                
-        except Exception as e:
-            detailed_logger.error(f"运动方向估计失败: {str(e)}")
-            return None
-
-    def _calculate_text_confidence(self, region: np.ndarray) -> float:
-        """计算区域包含文本的置信度
-        
-        Args:
-            region: 图像区域数据
-
-        Returns:
-            float: 置信度分数 (0-1)
-        """
-        try:
-            # 计算区域的一些特征来评估是否包含文本
-            
-            # 计算垂直和水平梯度
-            sobelx = cv2.Sobel(region, cv2.CV_64F, 1, 0, ksize=3)
-            sobely = cv2.Sobel(region, cv2.CV_64F, 0, 1, ksize=3)
-            
-            # 文本通常有强烈的垂直边缘
-            gradient_ratio = np.mean(np.abs(sobelx)) / (np.mean(np.abs(sobely)) + 1e-6)
-            
-            # 计算局部方差（文本区域通常方差较大）
-            local_var = np.var(region)
-            
-            # 综合评分
-            score = (gradient_ratio * 0.7 + min(local_var / 1000.0, 1.0) * 0.3)
-            return float(min(max(score, 0.0), 1.0))
-            
-        except Exception as e:
-            detailed_logger.error(f"文本置信度计算失败: {str(e)}")
-            return 0.0
-
-    def get_scene_history(self) -> List[Dict]:
-        """获取场景历史记录
-        
-        Returns:
-            List[Dict]: 场景历史记录列表
-        """
-        return list(self.scene_history)
-
-    def clear_history(self) -> None:
-        """清除场景历史记录"""
-        self.scene_history.clear()
+                if element['confidence'] < min_confidence:
+                    continue
+                    
+                match = True
+                for key, value in filters.items():
+                    if key not in element or element[key] != value:
+                        match = False
+                        break
+                        
+                if match:
+                    elements.append(element)
+                    
+        return elements
