@@ -1,5 +1,5 @@
 from enum import Enum, auto
-from typing import Dict, List, Optional, Callable, Any
+from typing import Dict, List, Optional, Any, Callable
 from datetime import datetime
 from utils.logger import detailed_logger
 
@@ -185,3 +185,83 @@ class Task:
             'error_message': self.error_message,
             'performance_metrics': self.performance_metrics
         }
+
+class TaskType(Enum):
+    """Task types"""
+    NORMAL = auto()    # 普通任务
+    SCHEDULED = auto() # 定时任务
+    REPEATING = auto() # 循环任务
+    DAILY = auto()     # 日常任务
+    WEEKLY = auto()    # 周常任务
+    EVENT = auto()     # 活动任务
+    STORY = auto()     # 剧情任务
+    BATTLE = auto()    # 战斗任务
+    RESOURCE = auto()  # 资源任务
+    CUSTOM = auto()    # 自定义任务
+
+class TaskError(Exception):
+    """Task related errors"""
+    pass
+
+class ScheduledTask(Task):
+    """Scheduled task class"""
+    
+    def __init__(self, 
+                 task_id: str,
+                 name: str,
+                 priority: TaskPriority = TaskPriority.NORMAL,
+                 dependencies: List[str] = None,
+                 timeout: float = None,
+                 start_time: str = None,
+                 end_time: str = None,
+                 repeat_count: int = 1,
+                 interval: int = 0):
+        """Initialize scheduled task
+        
+        Args:
+            task_id: Task ID
+            name: Task name
+            priority: Task priority
+            dependencies: List of dependent task IDs
+            timeout: Task timeout in seconds
+            start_time: Start time for scheduled tasks (HH:MM format)
+            end_time: End time for scheduled tasks (HH:MM format)
+            repeat_count: Number of times to repeat
+            interval: Interval between repeats in seconds
+        """
+        super().__init__(task_id, name, priority, dependencies, timeout)
+        self.start_time = start_time
+        self.end_time = end_time
+        self.repeat_count = repeat_count
+        self.interval = interval
+
+    def should_run(self) -> bool:
+        """Check if task should run now
+        
+        Returns:
+            bool: True if task should run
+        """
+        if self.status not in [TaskStatus.PENDING, TaskStatus.SCHEDULED]:
+            return False
+            
+        now = datetime.now()
+        current_time = now.strftime("%H:%M")
+        if current_time < self.start_time:
+            return False
+        if self.end_time and current_time > self.end_time:
+            return False
+        return True
+
+    def can_retry(self) -> bool:
+        """Check if task can be retried
+        
+        Returns:
+            bool: True if task can be retried
+        """
+        if not self.auto_restart:
+            return False
+            
+        if self.status != TaskStatus.FAILED:
+            return False
+            
+        return self.current_retry < self.max_retries

@@ -1,165 +1,365 @@
-import pygame
-import asyncio
+"""
+Advanced debug interface for game automation
+"""
+
 import numpy as np
-from game_automation.game_engine import GameEngine
-from game_automation.ai.advanced_decision_maker import advanced_decision_maker
-from game_automation.visualization.data_visualizer import data_visualizer
+from datetime import datetime
+from typing import Optional, Dict, Any
+from PySide6.QtWidgets import (
+    QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
+    QPushButton, QLabel, QTextEdit, QSplitter,
+    QTreeWidget, QTreeWidgetItem, QTabWidget,
+    QDockWidget, QMenuBar, QStatusBar, QMessageBox,
+    QComboBox, QSpinBox, QCheckBox
+)
+from PySide6.QtCore import Qt, Signal, Slot, QTimer
+from PySide6.QtGui import QImage, QPixmap
 
-class AdvancedDebugInterface:
-    def __init__(self, game_engine):
-        self.game_engine = game_engine
-        self.screen_width = 1280
-        self.screen_height = 720
-        self.screen = None
-        self.font = None
-        self.clock = None
-        self.running = False
+import matplotlib
+matplotlib.use('Qt5Agg')
+from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
+from matplotlib.figure import Figure
+import matplotlib.pyplot as plt
+from mpl_toolkits.mplot3d import Axes3D
 
-    async def initialize(self):
-        pygame.init()
-        self.screen = pygame.display.set_mode((self.screen_width, self.screen_height))
-        pygame.display.set_caption("Advanced Game Automation Debug Interface")
-        self.font = pygame.font.Font(None, 24)
-        self.clock = pygame.time.Clock()
+from ..core.events.event_manager import Event, EventType, EventManager
+from ..utils.logger import get_logger
 
-    async def run(self):
-        self.running = True
-        while self.running:
-            for event in pygame.event.get():
-                if event.type == pygame.QUIT:
-                    self.running = False
+logger = get_logger(__name__)
 
-            self.screen.fill((0, 0, 0))
-            await self.draw_game_state()
-            await self.draw_ai_decision_process()
-            await self.draw_performance_metrics()
-            await self.draw_action_history()
-            pygame.display.flip()
-            self.clock.tick(30)
-            await asyncio.sleep(0)
-
-        pygame.quit()
-
-    async def draw_game_state(self):
-        game_state = await self.game_engine.get_game_state()
-        y = 10
-        for key, value in game_state.items():
-            text = self.font.render(f"{key}: {value}", True, (255, 255, 255))
-            self.screen.blit(text, (10, y))
-            y += 30
-
-    async def draw_ai_decision_process(self):
-        decision_info = await advanced_decision_maker.get_decision_info()
-        x, y = 400, 10
-        for step, info in decision_info.items():
-            text = self.font.render(f"{step}: {info}", True, (255, 255, 0))
-            self.screen.blit(text, (x, y))
-            y += 30
-
-    async def draw_performance_metrics(self):
-        metrics = await self.game_engine.get_performance_metrics()
-        x, y = 800, 10
-        for metric, value in metrics.items():
-            text = self.font.render(f"{metric}: {value}", True, (0, 255, 0))
-            self.screen.blit(text, (x, y))
-            y += 30
-
-    async def draw_action_history(self):
-        history = await self.game_engine.get_action_history()
-        x, y = 10, 400
-        for action in history[-10:]:  # 显示最近的10个动作
-            text = self.font.render(action, True, (200, 200, 200))
-            self.screen.blit(text, (x, y))
-            y += 30
-
-    async def update_3d_visualization(self):
-        # 这里实现3D可视化逻辑
-        pass
-
-class RealTime3DVisualizer:
-    def __init__(self):
-        self.fig = plt.figure()
-        self.ax = self.fig.add_subplot(111, projection='3d')
-
-    def update(self, game_state):
-        self.ax.clear()
-        # 这里根据游戏状态更新3D图形
-        # 例如，绘制玩家位置、敌人位置、物品等
-        player_pos = game_state['player_position']
-        self.ax.scatter(player_pos[0], player_pos[1], player_pos[2], c='r', marker='o')
-        
-        for enemy in game_state['enemies']:
-            self.ax.scatter(enemy['x'], enemy['y'], enemy['z'], c='b', marker='^')
-        
-        for item in game_state['items']:
-            self.ax.scatter(item['x'], item['y'], item['z'], c='g', marker='s')
-        
-        self.ax.set_xlabel('X')
-        self.ax.set_ylabel('Y')
-        self.ax.set_zlabel('Z')
-        self.ax.set_title('Game State Visualization')
-        plt.draw()
-        plt.pause(0.001)
-
-class InteractiveDebugger:
-    def __init__(self, game_engine):
-        self.game_engine = game_engine
-        self.paused = False
-        self.step_mode = False
-
-    async def run(self):
-        while True:
-            command = await asyncio.get_event_loop().run_in_executor(None, input, "Debug command: ")
-            await self.process_command(command)
-
-    async def process_command(self, command):
-        if command == "pause":
-            self.paused = True
-            print("Game paused")
-        elif command == "resume":
-            self.paused = False
-            print("Game resumed")
-        elif command == "step":
-            self.step_mode = True
-            await self.game_engine.step()
-        elif command == "inspect":
-            await self.inspect_game_state()
-        elif command == "modify":
-            await self.modify_game_state()
-        elif command == "breakpoint":
-            await self.set_breakpoint()
-        elif command == "quit":
-            self.game_engine.stop_automation = True
-            return False
-        return True
-
-    async def inspect_game_state(self):
-        game_state = await self.game_engine.get_game_state()
-        print(json.dumps(game_state, indent=2))
-
-    async def modify_game_state(self):
-        key = input("Enter the state key to modify: ")
-        value = input("Enter the new value: ")
-        await self.game_engine.set_game_state(key, value)
-        print(f"Updated {key} to {value}")
-
-    async def set_breakpoint(self):
-        condition = input("Enter breakpoint condition: ")
-        self.game_engine.add_breakpoint(condition)
-        print(f"Breakpoint set: {condition}")
-
-advanced_debug_interface = AdvancedDebugInterface(GameEngine())
-real_time_3d_visualizer = RealTime3DVisualizer()
-interactive_debugger = InteractiveDebugger(GameEngine())
-
-# 使用示例
-async def main():
-    await advanced_debug_interface.initialize()
-    debug_task = asyncio.create_task(advanced_debug_interface.run())
-    visualizer_task = asyncio.create_task(real_time_3d_visualizer.update(await GameEngine().get_game_state()))
-    debugger_task = asyncio.create_task(interactive_debugger.run())
+class GameStateVisualizer(QWidget):
+    """Game state visualization widget"""
     
-    await asyncio.gather(debug_task, visualizer_task, debugger_task)
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self._setup_ui()
+        
+    def _setup_ui(self):
+        """Setup user interface"""
+        layout = QVBoxLayout(self)
+        
+        # Create matplotlib figure
+        self.figure = Figure(figsize=(8, 6))
+        self.canvas = FigureCanvas(self.figure)
+        layout.addWidget(self.canvas)
+        
+        # Add subplot
+        self.ax = self.figure.add_subplot(111)
+        self.ax.set_title("游戏状态可视化")
+        
+    def update_visualization(self, game_state: Dict[str, Any]):
+        """Update visualization with new game state
+        
+        Args:
+            game_state: Game state data
+        """
+        # Clear previous plot
+        self.ax.clear()
+        
+        # TODO: Implement visualization based on game state
+        # This is just a placeholder
+        if 'data' in game_state:
+            data = game_state['data']
+            if isinstance(data, np.ndarray):
+                self.ax.imshow(data)
+                
+        self.canvas.draw()
 
-if __name__ == "__main__":
-    asyncio.run(main())
+class GameStateInspector(QWidget):
+    """Game state inspection widget"""
+    
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self._setup_ui()
+        
+    def _setup_ui(self):
+        """Setup user interface"""
+        layout = QVBoxLayout(self)
+        
+        self.tree = QTreeWidget()
+        self.tree.setHeaderLabels(["属性", "值"])
+        layout.addWidget(self.tree)
+        
+    def update_state(self, game_state: Dict[str, Any]):
+        """Update displayed game state
+        
+        Args:
+            game_state: Game state data
+        """
+        self.tree.clear()
+        
+        for key, value in game_state.items():
+            item = QTreeWidgetItem([str(key)])
+            self.add_items(item, value)
+            self.tree.addTopLevelItem(item)
+            
+        self.tree.expandAll()
+        
+    def add_items(self, parent: QTreeWidgetItem, value: Any):
+        """Add items to tree recursively
+        
+        Args:
+            parent: Parent tree item
+            value: Value to add
+        """
+        if isinstance(value, dict):
+            for key, val in value.items():
+                item = QTreeWidgetItem([str(key)])
+                parent.addChild(item)
+                self.add_items(item, val)
+        elif isinstance(value, list):
+            for i, val in enumerate(value):
+                item = QTreeWidgetItem([f"[{i}]"])
+                parent.addChild(item)
+                self.add_items(item, val)
+        else:
+            parent.setText(1, str(value))
+
+class ControlPanel(QWidget):
+    """Debug control panel"""
+    
+    def __init__(self, event_manager: EventManager, parent=None):
+        """Initialize panel
+        
+        Args:
+            event_manager: Event manager instance
+            parent: Parent widget
+        """
+        super().__init__(parent)
+        self.event_manager = event_manager
+        self._setup_ui()
+        
+    def _setup_ui(self):
+        """Setup user interface"""
+        layout = QVBoxLayout(self)
+        
+        # Control buttons
+        btn_layout = QHBoxLayout()
+        
+        self.pause_btn = QPushButton("暂停")
+        self.pause_btn.setCheckable(True)
+        self.pause_btn.clicked.connect(self._on_pause)
+        btn_layout.addWidget(self.pause_btn)
+        
+        self.step_btn = QPushButton("单步")
+        self.step_btn.clicked.connect(self._on_step)
+        self.step_btn.setEnabled(False)
+        btn_layout.addWidget(self.step_btn)
+        
+        self.reset_btn = QPushButton("重置")
+        self.reset_btn.clicked.connect(self._on_reset)
+        btn_layout.addWidget(self.reset_btn)
+        
+        layout.addLayout(btn_layout)
+        
+        # Update interval
+        interval_layout = QHBoxLayout()
+        interval_layout.addWidget(QLabel("更新间隔:"))
+        
+        self.interval = QSpinBox()
+        self.interval.setRange(100, 5000)
+        self.interval.setSingleStep(100)
+        self.interval.setValue(1000)
+        self.interval.setSuffix(" ms")
+        self.interval.valueChanged.connect(self._on_interval_changed)
+        interval_layout.addWidget(self.interval)
+        
+        layout.addLayout(interval_layout)
+        
+        # Add stretch
+        layout.addStretch()
+        
+    async def _on_pause(self, checked: bool):
+        """Handle pause button click
+        
+        Args:
+            checked: Button checked state
+        """
+        self.step_btn.setEnabled(checked)
+        await self.event_manager.emit(Event(
+            EventType.GUI_ACTION,
+            {
+                'action': 'pause',
+                'paused': checked
+            }
+        ))
+        
+    async def _on_step(self):
+        """Handle step button click"""
+        await self.event_manager.emit(Event(
+            EventType.GUI_ACTION,
+            {
+                'action': 'step'
+            }
+        ))
+        
+    async def _on_reset(self):
+        """Handle reset button click"""
+        await self.event_manager.emit(Event(
+            EventType.GUI_ACTION,
+            {
+                'action': 'reset'
+            }
+        ))
+        
+    async def _on_interval_changed(self, value: int):
+        """Handle interval change
+        
+        Args:
+            value: New interval value
+        """
+        await self.event_manager.emit(Event(
+            EventType.GUI_ACTION,
+            {
+                'action': 'set_interval',
+                'interval': value
+            }
+        ))
+
+class LogViewer(QWidget):
+    """Log viewing widget"""
+    
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self._setup_ui()
+        
+    def _setup_ui(self):
+        """Setup user interface"""
+        layout = QVBoxLayout(self)
+        
+        self.log_text = QTextEdit()
+        self.log_text.setReadOnly(True)
+        layout.addWidget(self.log_text)
+        
+    def append_log(self, message: str):
+        """Append log message
+        
+        Args:
+            message: Message to append
+        """
+        timestamp = datetime.now().strftime("%H:%M:%S")
+        self.log_text.append(f"[{timestamp}] {message}")
+        
+    def clear_log(self):
+        """Clear log messages"""
+        self.log_text.clear()
+
+class AdvancedDebugInterface(QMainWindow):
+    """Advanced debug interface main window"""
+    
+    def __init__(self, event_manager: EventManager, parent=None):
+        """Initialize interface
+        
+        Args:
+            event_manager: Event manager instance
+            parent: Parent widget
+        """
+        super().__init__(parent)
+        self.event_manager = event_manager
+        
+        # Create components
+        self.visualizer = GameStateVisualizer()
+        self.inspector = GameStateInspector()
+        self.control_panel = ControlPanel(event_manager)
+        self.log_viewer = LogViewer()
+        
+        # Setup update timer
+        self.update_timer = QTimer()
+        self.update_timer.timeout.connect(self._update)
+        self.update_timer.start(1000)  # Default 1s interval
+        
+        # Setup UI
+        self._setup_ui()
+        
+        # Subscribe to events
+        self._subscribe_events()
+        
+    def _setup_ui(self):
+        """Setup user interface"""
+        self.setWindowTitle("高级调试界面")
+        self.setMinimumSize(1280, 720)
+        
+        # Create central widget
+        central = QWidget()
+        self.setCentralWidget(central)
+        layout = QHBoxLayout(central)
+        
+        # Create main splitter
+        splitter = QSplitter(Qt.Horizontal)
+        layout.addWidget(splitter)
+        
+        # Left panel - Control
+        left_widget = QWidget()
+        left_layout = QVBoxLayout(left_widget)
+        left_layout.addWidget(self.control_panel)
+        splitter.addWidget(left_widget)
+        
+        # Center panel - Visualization and Inspection
+        center_widget = QWidget()
+        center_layout = QVBoxLayout(center_widget)
+        
+        center_splitter = QSplitter(Qt.Vertical)
+        center_layout.addWidget(center_splitter)
+        
+        center_splitter.addWidget(self.visualizer)
+        center_splitter.addWidget(self.inspector)
+        
+        splitter.addWidget(center_widget)
+        
+        # Right panel - Log
+        right_widget = QWidget()
+        right_layout = QVBoxLayout(right_widget)
+        right_layout.addWidget(self.log_viewer)
+        splitter.addWidget(right_widget)
+        
+        # Set stretch factors
+        splitter.setStretchFactor(0, 1)  # Control panel
+        splitter.setStretchFactor(1, 2)  # Visualization
+        splitter.setStretchFactor(2, 1)  # Log viewer
+        
+    def _subscribe_events(self):
+        """Subscribe to events"""
+        self.event_manager.subscribe(
+            EventType.GAME_STATE_CHANGED,
+            self._on_game_state_changed
+        )
+        self.event_manager.subscribe(
+            EventType.GAME_ERROR,
+            self._on_game_error
+        )
+        
+    async def _on_game_state_changed(self, event: Event):
+        """Handle game state change event
+        
+        Args:
+            event: Event data
+        """
+        game_state = event.data
+        self.visualizer.update_visualization(game_state)
+        self.inspector.update_state(game_state)
+        
+    async def _on_game_error(self, event: Event):
+        """Handle game error event
+        
+        Args:
+            event: Event data
+        """
+        error = event.data.get('error', 'Unknown error')
+        self.log_viewer.append_log(f"错误: {error}")
+        
+    def _update(self):
+        """Update interface periodically"""
+        # This is now handled by events
+        pass
+        
+    def closeEvent(self, event):
+        """Handle window close event
+        
+        Args:
+            event: Close event
+        """
+        self.update_timer.stop()
+        event.accept()
+
+advanced_debug_interface = AdvancedDebugInterface(EventManager())
+advanced_debug_interface.show()

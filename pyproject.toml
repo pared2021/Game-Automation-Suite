@@ -1,0 +1,76 @@
+[build-system]
+requires = ["setuptools>=45", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "game-automation-suite"
+version = "0.1.0"
+description = "An intelligent game automation suite supporting both PC games and emulators"
+requires-python = ">=3.8"
+license = {text = "MIT"}
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "Programming Language :: Python :: 3.8",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+]
+
+dependencies = [
+    # GUI
+    "pyside6>=6.5.0",
+    
+    # Image Processing
+    "opencv-python>=4.8.0",
+    "pillow>=10.0.0",
+    "numpy>=1.24.0",
+    
+    # Game Control
+    "pyautogui>=0.9.53",
+    "pywin32>=305",
+    "keyboard>=0.13.5",
+    "mouse>=0.7.1",
+    
+    # AI & Recognition
+    "paddleocr>=2.7.0",
+    "torch>=2.0.0",
+    "scikit-learn>=1.3.0",
+    "transformers>=4.30.0",
+    
+    # Utils
+    "python-i18n>=0.3.9",
+    "loguru>=0.7.0",
+    "rich>=13.4.0",
+    "pyyaml>=6.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.4.0",
+    "pytest-cov>=4.1.0",
+    "black>=23.7.0",
+    "flake8>=6.1.0",
+    "mypy>=1.5.0",
+    "isort>=5.12.0",
+    "pre-commit>=3.3.3",
+]
+
+[tool.black]
+line-length = 88
+target-version = ['py38']
+include = '\.pyi?$'
+
+[tool.isort]
+profile = "black"
+multi_line_output = 3
+
+[tool.mypy]
+python_version = "3.8"
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+addopts = "-ra -q --cov=game_automation"

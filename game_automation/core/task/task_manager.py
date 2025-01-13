@@ -1,26 +1,46 @@
-from typing import Dict, List, Optional, Callable, Any
+"""Task manager for game automation."""
+from typing import Dict, List, Optional, Callable, Any, Set
 from datetime import datetime, timedelta
 import json
 import os
+import asyncio
+from enum import Enum
 
 from utils.error_handler import log_exception, GameAutomationError
 from utils.logger import detailed_logger
 from .task_types import Task, TaskStatus, TaskPriority
 from .task_rule import TaskRuleManager
 from .task_history import TaskHistory, TaskHistoryEntry
+from .task_scheduler import TaskScheduler
+from ..monitor.task_monitor import TaskMonitor, MetricType
 
 class TaskError(GameAutomationError):
     """Task related errors"""
     pass
 
+class TaskExecutionMode(Enum):
+    """Task execution modes"""
+    SEQUENTIAL = "sequential"  # Execute tasks one by one
+    PARALLEL = "parallel"    # Execute multiple tasks in parallel
+    HYBRID = "hybrid"       # Mix of sequential and parallel
+
 class TaskManager:
     """Task manager"""
     
-    def __init__(self, state_dir: str = "data/task_state"):
+    def __init__(
+        self,
+        state_dir: str = "data/task_state",
+        max_parallel_tasks: int = 3,
+        execution_mode: TaskExecutionMode = TaskExecutionMode.SEQUENTIAL,
+        monitor_dir: str = "data/monitor"
+    ):
         """Initialize task manager
         
         Args:
             state_dir: State save directory
+            max_parallel_tasks: Maximum number of parallel tasks
+            execution_mode: Task execution mode
+            monitor_dir: Monitor data directory
         """
         self.state_dir = state_dir
         if not os.path.exists(state_dir):
@@ -32,15 +52,314 @@ class TaskManager:
         self.completed_tasks: List[Task] = []
         self.failed_tasks: List[Task] = []
         
+        # Execution settings
+        self.max_parallel_tasks = max_parallel_tasks
+        self.execution_mode = execution_mode
+        
+        # Task groups
+        self.task_groups: Dict[str, Set[str]] = {}
+        
         # Rule manager
         self.rule_manager = TaskRuleManager()
         
         # History manager
         self.history = TaskHistory()
         
+        # Task scheduler
+        self.scheduler = TaskScheduler()
+        
+        # Task monitor
+        self.monitor = TaskMonitor(monitor_dir)
+        
         # Monitoring config
         self.auto_save_interval = 300  # 5 minutes auto save
         self.last_save_time = datetime.now()
+        
+        # Task hooks
+        self.pre_execute_hooks: List[Callable[[Task], None]] = []
+        self.post_execute_hooks: List[Callable[[Task], None]] = []
+        
+        # Add default monitoring hooks
+        self._add_monitoring_hooks()
+
+    def _add_monitoring_hooks(self):
+        """Add default monitoring hooks"""
+        def pre_execute_monitor(task: Task):
+            # Start monitoring
+            self.monitor.start_monitoring(task)
+            
+            # Record start time
+            start_time = datetime.now()
+            task.execution_start_time = start_time
+            
+            # Add event
+            self.monitor.add_event(
+                task.task_id,
+                "execution_start",
+                f"Task {task.name} started execution",
+                {
+                    "priority": task.priority.value,
+                    "dependencies": [t.task_id for t in task.dependencies]
+                }
+            )
+            
+        def post_execute_monitor(task: Task):
+            # Calculate execution time
+            if hasattr(task, 'execution_start_time'):
+                duration = datetime.now() - task.execution_start_time
+                self.monitor.add_metric(
+                    task.task_id,
+                    "execution_time",
+                    MetricType.DURATION,
+                    duration,
+                    {"unit": "seconds"}
+                )
+                
+            # Add completion event
+            status = "success" if task.status == TaskStatus.COMPLETED else "failed"
+            self.monitor.add_event(
+                task.task_id,
+                f"execution_{status}",
+                f"Task {task.name} {status}",
+                {"error": str(task.error) if task.error else None}
+            )
+            
+            # Save monitoring data
+            self.monitor.save_metrics(task.task_id)
+            self.monitor.save_diagnostics(task.task_id)
+            
+            # Stop monitoring
+            self.monitor.stop_monitoring(task.task_id)
+            
+        self.add_pre_execute_hook(pre_execute_monitor)
+        self.add_post_execute_hook(post_execute_monitor)
+
+    def add_task_group(self, group_name: str, task_ids: List[str]) -> None:
+        """Add task group
+        
+        Args:
+            group_name: Group name
+            task_ids: List of task IDs in group
+        """
+        self.task_groups[group_name] = set(task_ids)
+        detailed_logger.info(f"Added task group: {group_name} with {len(task_ids)} tasks")
+
+    def get_group_tasks(self, group_name: str) -> List[Task]:
+        """Get tasks in group
+        
+        Args:
+            group_name: Group name
+            
+        Returns:
+            List[Task]: List of tasks in group
+        """
+        if group_name not in self.task_groups:
+            raise TaskError(f"Task group not found: {group_name}")
+            
+        return [
+            self.tasks[task_id]
+            for task_id in self.task_groups[group_name]
+            if task_id in self.tasks
+        ]
+
+    def add_pre_execute_hook(self, hook: Callable[[Task], None]) -> None:
+        """Add pre-execute hook
+        
+        Args:
+            hook: Hook function
+        """
+        self.pre_execute_hooks.append(hook)
+
+    def add_post_execute_hook(self, hook: Callable[[Task], None]) -> None:
+        """Add post-execute hook
+        
+        Args:
+            hook: Hook function
+        """
+        self.post_execute_hooks.append(hook)
+
+    async def execute_task(self, task: Task) -> bool:
+        """Execute task
+        
+        Args:
+            task: Task to execute
+            
+        Returns:
+            bool: Whether execution succeeded
+        """
+        try:
+            # Run pre-execute hooks
+            for hook in self.pre_execute_hooks:
+                try:
+                    hook(task)
+                except Exception as e:
+                    detailed_logger.error(f"Pre-execute hook failed: {str(e)}")
+                    self.monitor.add_error(
+                        task.task_id,
+                        "Hook execution failed",
+                        {"hook": "pre_execute", "error": str(e)}
+                    )
+                    
+            # Execute task
+            success = await task.execute()
+            
+            # Monitor task status
+            if success:
+                task.status = TaskStatus.COMPLETED
+                self.completed_tasks.append(task)
+            else:
+                task.status = TaskStatus.FAILED
+                self.failed_tasks.append(task)
+                self.monitor.add_error(
+                    task.task_id,
+                    "Task execution failed",
+                    {"error": str(task.error) if task.error else "Unknown error"}
+                )
+                
+            # Run post-execute hooks
+            for hook in self.post_execute_hooks:
+                try:
+                    hook(task)
+                except Exception as e:
+                    detailed_logger.error(f"Post-execute hook failed: {str(e)}")
+                    self.monitor.add_error(
+                        task.task_id,
+                        "Hook execution failed",
+                        {"hook": "post_execute", "error": str(e)}
+                    )
+                    
+            return success
+            
+        except Exception as e:
+            detailed_logger.error(f"Task execution error: {str(e)}")
+            self.monitor.add_error(
+                task.task_id,
+                "Unexpected execution error",
+                {"error": str(e)}
+            )
+            return False
+
+    async def execute_group(self, group_name: str) -> bool:
+        """Execute task group
+        
+        Args:
+            group_name: Group name
+            
+        Returns:
+            bool: Whether all tasks succeeded
+        """
+        tasks = self.get_group_tasks(group_name)
+        if not tasks:
+            return True
+            
+        if self.execution_mode == TaskExecutionMode.SEQUENTIAL:
+            # Execute sequentially
+            for task in tasks:
+                if not await self.execute_task(task):
+                    return False
+            return True
+            
+        elif self.execution_mode == TaskExecutionMode.PARALLEL:
+            # Execute in parallel
+            tasks_iter = iter(tasks)
+            running = []
+            
+            while True:
+                # Start new tasks
+                while len(running) < self.max_parallel_tasks:
+                    try:
+                        task = next(tasks_iter)
+                        running.append(
+                            asyncio.create_task(self.execute_task(task))
+                        )
+                    except StopIteration:
+                        break
+                        
+                if not running:
+                    break
+                    
+                # Wait for any task to complete
+                done, running = await asyncio.wait(
+                    running,
+                    return_when=asyncio.FIRST_COMPLETED
+                )
+                
+                # Check results
+                for task in done:
+                    if not task.result():
+                        return False
+                        
+            return True
+            
+        else:  # HYBRID mode
+            # Group tasks by priority
+            priority_groups: Dict[TaskPriority, List[Task]] = {}
+            for task in tasks:
+                if task.priority not in priority_groups:
+                    priority_groups[task.priority] = []
+                priority_groups[task.priority].append(task)
+                
+            # Execute priority groups sequentially
+            for priority in sorted(priority_groups.keys(), reverse=True):
+                group_tasks = priority_groups[priority]
+                
+                # Execute tasks in group in parallel
+                tasks_iter = iter(group_tasks)
+                running = []
+                
+                while True:
+                    # Start new tasks
+                    while len(running) < self.max_parallel_tasks:
+                        try:
+                            task = next(tasks_iter)
+                            running.append(
+                                asyncio.create_task(self.execute_task(task))
+                            )
+                        except StopIteration:
+                            break
+                            
+                    if not running:
+                        break
+                        
+                    # Wait for any task to complete
+                    done, running = await asyncio.wait(
+                        running,
+                        return_when=asyncio.FIRST_COMPLETED
+                    )
+                    
+                    # Check results
+                    for task in done:
+                        if not task.result():
+                            return False
+                            
+            return True
+
+    def schedule_task(
+        self,
+        task: Task,
+        schedule: str,
+        max_retries: int = 3
+    ) -> None:
+        """Schedule task execution
+        
+        Args:
+            task: Task to schedule
+            schedule: Cron-style schedule
+            max_retries: Maximum retry attempts
+        """
+        self.scheduler.schedule_task(task, schedule, max_retries)
+        detailed_logger.info(
+            f"Scheduled task: {task.name} ({task.task_id}) with schedule: {schedule}"
+        )
+
+    def cancel_schedule(self, task_id: str) -> None:
+        """Cancel task schedule
+        
+        Args:
+            task_id: Task ID
+        """
+        self.scheduler.cancel_schedule(task_id)
+        detailed_logger.info(f"Cancelled schedule for task: {task_id}")
 
     @log_exception
     def add_task(self, task: Task) -> None:
@@ -249,11 +568,28 @@ class TaskManager:
 
     def _sort_queue(self) -> None:
         """Sort task queue"""
-        self.task_queue.sort(key=lambda x: (
-            -x.priority.value,  # Higher priority first
-            len(x.dependencies),  # Less dependencies first
-            x.task_id  # Sort by ID if equal
-        ))
+        # Group tasks by priority
+        priority_groups: Dict[TaskPriority, List[Task]] = {}
+        for task in self.task_queue:
+            if task.priority not in priority_groups:
+                priority_groups[task.priority] = []
+            priority_groups[task.priority].append(task)
+            
+        # Sort each priority group
+        sorted_queue = []
+        for priority in sorted(priority_groups.keys(), reverse=True):
+            group = priority_groups[priority]
+            
+            # Sort by dependencies and execution time
+            group.sort(key=lambda x: (
+                len(x.dependencies),  # Less dependencies first
+                x.estimated_duration or float('inf'),  # Shorter tasks first
+                x.task_id  # Sort by ID if equal
+            ))
+            
+            sorted_queue.extend(group)
+            
+        self.task_queue = sorted_queue
 
     def _get_next_executable_task(self) -> Optional[Task]:
         """Get next executable task
