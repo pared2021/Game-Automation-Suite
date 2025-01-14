@@ -14,7 +14,7 @@ from game_automation.core.error.error_manager import (
 # Temporarily comment out recognition imports for testing
 # from game_automation.core.recognition.state_analyzer import GameState
 from game_automation.core.task.task_adapter import TaskAdapter
-from game_automation.core.task.task_monitor import TaskMonitor
+from game_automation.core.monitor import TaskMonitor
 
 # Temporary GameState mock
 class GameState:

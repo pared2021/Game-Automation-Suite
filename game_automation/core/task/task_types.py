@@ -2,6 +2,7 @@ from enum import Enum, auto
 from typing import Dict, List, Optional, Any, Callable
 from datetime import datetime
 from utils.logger import detailed_logger
+from .task_priority import PriorityLevel
 
 class TaskStatus(Enum):
     """Task status enumeration"""
@@ -11,20 +12,13 @@ class TaskStatus(Enum):
     FAILED = auto()     # Execution failed
     PAUSED = auto()     # Paused
 
-class TaskPriority(Enum):
-    """Task priority enumeration"""
-    LOW = 0
-    NORMAL = 1
-    HIGH = 2
-    URGENT = 3
-
 class Task:
     """Base task class"""
     
     def __init__(self, 
                  task_id: str,
                  name: str,
-                 priority: TaskPriority = TaskPriority.NORMAL,
+                 priority: PriorityLevel = PriorityLevel.NORMAL,
                  dependencies: List[str] = None,
                  timeout: float = None):
         """Initialize task
@@ -209,7 +203,7 @@ class ScheduledTask(Task):
     def __init__(self, 
                  task_id: str,
                  name: str,
-                 priority: TaskPriority = TaskPriority.NORMAL,
+                 priority: PriorityLevel = PriorityLevel.NORMAL,
                  dependencies: List[str] = None,
                  timeout: float = None,
                  start_time: str = None,

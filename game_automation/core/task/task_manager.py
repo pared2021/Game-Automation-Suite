@@ -11,8 +11,10 @@ from utils.logger import detailed_logger
 from .task_types import Task, TaskStatus, TaskPriority
 from .task_rule import TaskRuleManager
 from .task_history import TaskHistory, TaskHistoryEntry
-from .task_scheduler import TaskScheduler
+from .task_scheduler import TaskScheduler, SchedulingStrategy
 from ..monitor.task_monitor import TaskMonitor, MetricType
+from .task_lifecycle import TaskLifecycleManager, TaskState
+from .task_dependency import TaskDependencyManager, DependencyType
 
 class TaskError(GameAutomationError):
     """Task related errors"""
@@ -65,11 +67,21 @@ class TaskManager:
         # History manager
         self.history = TaskHistory()
         
-        # Task scheduler
-        self.scheduler = TaskScheduler()
-        
         # Task monitor
         self.monitor = TaskMonitor(monitor_dir)
+        
+        # Task lifecycle manager
+        self.lifecycle = TaskLifecycleManager()
+        
+        # Task dependency manager
+        self.dependency = TaskDependencyManager(self.lifecycle)
+        
+        # Task scheduler
+        self.scheduler = TaskScheduler(
+            dependency_manager=self.dependency,
+            task_monitor=self.monitor,
+            max_parallel_tasks=max_parallel_tasks
+        )
         
         # Monitoring config
         self.auto_save_interval = 300  # 5 minutes auto save
@@ -81,6 +93,9 @@ class TaskManager:
         
         # Add default monitoring hooks
         self._add_monitoring_hooks()
+        
+        # Add lifecycle hooks
+        self._add_lifecycle_hooks()
 
     def _add_monitoring_hooks(self):
         """Add default monitoring hooks"""
@@ -134,6 +149,55 @@ class TaskManager:
         self.add_pre_execute_hook(pre_execute_monitor)
         self.add_post_execute_hook(post_execute_monitor)
 
+    def _add_lifecycle_hooks(self):
+        """Add lifecycle management hooks"""
+        # State hooks
+        def on_ready(task: Task):
+            # Add to execution queue when ready
+            if task not in self.task_queue:
+                self.task_queue.append(task)
+                self._sort_queue()
+                
+        def on_running(task: Task):
+            # Add to running tasks list
+            if task not in self.running_tasks:
+                self.running_tasks.append(task)
+                
+        def on_completed(task: Task):
+            # Move to completed list
+            if task in self.running_tasks:
+                self.running_tasks.remove(task)
+            if task not in self.completed_tasks:
+                self.completed_tasks.append(task)
+                
+        def on_failed(task: Task):
+            # Move to failed list
+            if task in self.running_tasks:
+                self.running_tasks.remove(task)
+            if task not in self.failed_tasks:
+                self.failed_tasks.append(task)
+                
+        # Add state hooks
+        self.lifecycle.add_state_hook(TaskState.READY, on_ready)
+        self.lifecycle.add_state_hook(TaskState.RUNNING, on_running)
+        self.lifecycle.add_state_hook(TaskState.COMPLETED, on_completed)
+        self.lifecycle.add_state_hook(TaskState.FAILED, on_failed)
+        
+        # Add transition hook for monitoring
+        def on_transition(task: Task, from_state: TaskState, to_state: TaskState):
+            self.monitor.add_event(
+                task.task_id,
+                "state_transition",
+                f"Task state changed from {from_state} to {to_state}",
+                {
+                    "from_state": from_state.name,
+                    "to_state": to_state.name,
+                    "timestamp": datetime.now().isoformat()
+                }
+            )
+            
+        self.lifecycle.add_transition_hook(on_transition)
+
     def add_task_group(self, group_name: str, task_ids: List[str]) -> None:
         """Add task group
         
@@ -178,6 +242,81 @@ class TaskManager:
         """
         self.post_execute_hooks.append(hook)
 
+    async def initialize(self):
+        """Initialize manager."""
+        # Initialize scheduler
+        await self.scheduler.initialize()
+        
+    async def cleanup(self):
+        """Clean up resources."""
+        # Clean up scheduler
+        await self.scheduler.cleanup()
+        
+        # Clean up other resources
+        self.tasks.clear()
+        self.task_queue.clear()
+        self.running_tasks.clear()
+        self.completed_tasks.clear()
+        self.failed_tasks.clear()
+        
+    async def add_task(self, task: Task, max_retries: int = 3) -> None:
+        """Add task
+        
+        Args:
+            task: Task instance
+            max_retries: Maximum retry attempts
+        """
+        self.tasks[task.task_id] = task
+        
+        # Register with lifecycle manager
+        self.lifecycle.register_task(task, max_retries)
+        
+        # Add to scheduler
+        await self.scheduler.add_task(task)
+        
+        # Add callbacks
+        task.on_complete(self._on_task_complete)
+        task.on_fail(self._on_task_fail)
+        task.on_progress(self._on_task_progress)
+        
+        detailed_logger.info(f"Added task: {task.name} ({task.task_id})")
+        
+    async def cancel_task(self, task_id: str):
+        """Cancel task.
+        
+        Args:
+            task_id: Task ID
+        """
+        # Remove from scheduler
+        self.scheduler.remove_task(task_id)
+        
+        # Cancel task
+        if task_id in self.tasks:
+            task = self.tasks[task_id]
+            task.status = TaskStatus.CANCELLED
+            task.completed_at = datetime.now()
+            
+        detailed_logger.info(f"Cancelled task {task_id}")
+        
+    def get_task_stats(self, task_id: str) -> Optional[Dict[str, Any]]:
+        """Get task statistics.
+        
+        Args:
+            task_id: Task ID
+            
+        Returns:
+            Optional[Dict[str, Any]]: Task statistics
+        """
+        return self.scheduler.get_task_stats(task_id)
+        
+    def set_scheduling_strategy(self, strategy: SchedulingStrategy) -> None:
+        """Set scheduling strategy.
+        
+        Args:
+            strategy: Scheduling strategy
+        """
+        self.scheduler.strategy = strategy
+
     async def execute_task(self, task: Task) -> bool:
         """Execute task
         
@@ -188,6 +327,19 @@ class TaskManager:
             bool: Whether execution succeeded
         """
         try:
+            # Check if task is ready
+            task_state = self.lifecycle.get_task_state(task.task_id)
+            if task_state != TaskState.READY:
+                detailed_logger.warning(
+                    f"Task not ready for execution: {task.task_id} "
+                    f"(current state: {task_state})"
+                )
+                return False
+            
+            # Transition to running state
+            if not self.lifecycle.transition_state(task, TaskState.RUNNING):
+                return False
+            
             # Run pre-execute hooks
             for hook in self.pre_execute_hooks:
                 try:
@@ -199,23 +351,10 @@ class TaskManager:
                         "Hook execution failed",
                         {"hook": "pre_execute", "error": str(e)}
                     )
-                    
+            
             # Execute task
             success = await task.execute()
             
-            # Monitor task status
-            if success:
-                task.status = TaskStatus.COMPLETED
-                self.completed_tasks.append(task)
-            else:
-                task.status = TaskStatus.FAILED
-                self.failed_tasks.append(task)
-                self.monitor.add_error(
-                    task.task_id,
-                    "Task execution failed",
-                    {"error": str(task.error) if task.error else "Unknown error"}
-                )
-                
             # Run post-execute hooks
             for hook in self.post_execute_hooks:
                 try:
@@ -227,163 +366,89 @@ class TaskManager:
                         "Hook execution failed",
                         {"hook": "post_execute", "error": str(e)}
                     )
-                    
+            
+            # Add history entry
+            self._add_history_entry(task)
+            
+            # Check auto save
+            self._check_auto_save()
+            
             return success
             
         except Exception as e:
-            detailed_logger.error(f"Task execution error: {str(e)}")
+            detailed_logger.error(f"Task execution error: {task.task_id} - {str(e)}")
             self.monitor.add_error(
                 task.task_id,
-                "Unexpected execution error",
+                "Execution error",
                 {"error": str(e)}
             )
             return False
 
-    async def execute_group(self, group_name: str) -> bool:
-        """Execute task group
-        
-        Args:
-            group_name: Group name
-            
-        Returns:
-            bool: Whether all tasks succeeded
-        """
-        tasks = self.get_group_tasks(group_name)
-        if not tasks:
-            return True
-            
-        if self.execution_mode == TaskExecutionMode.SEQUENTIAL:
-            # Execute sequentially
-            for task in tasks:
-                if not await self.execute_task(task):
-                    return False
-            return True
-            
-        elif self.execution_mode == TaskExecutionMode.PARALLEL:
-            # Execute in parallel
-            tasks_iter = iter(tasks)
-            running = []
-            
-            while True:
-                # Start new tasks
-                while len(running) < self.max_parallel_tasks:
-                    try:
-                        task = next(tasks_iter)
-                        running.append(
-                            asyncio.create_task(self.execute_task(task))
-                        )
-                    except StopIteration:
-                        break
-                        
-                if not running:
-                    break
-                    
-                # Wait for any task to complete
-                done, running = await asyncio.wait(
-                    running,
-                    return_when=asyncio.FIRST_COMPLETED
-                )
-                
-                # Check results
-                for task in done:
-                    if not task.result():
-                        return False
-                        
-            return True
-            
-        else:  # HYBRID mode
-            # Group tasks by priority
-            priority_groups: Dict[TaskPriority, List[Task]] = {}
-            for task in tasks:
-                if task.priority not in priority_groups:
-                    priority_groups[task.priority] = []
-                priority_groups[task.priority].append(task)
-                
-            # Execute priority groups sequentially
-            for priority in sorted(priority_groups.keys(), reverse=True):
-                group_tasks = priority_groups[priority]
-                
-                # Execute tasks in group in parallel
-                tasks_iter = iter(group_tasks)
-                running = []
-                
-                while True:
-                    # Start new tasks
-                    while len(running) < self.max_parallel_tasks:
-                        try:
-                            task = next(tasks_iter)
-                            running.append(
-                                asyncio.create_task(self.execute_task(task))
-                            )
-                        except StopIteration:
-                            break
-                            
-                    if not running:
-                        break
-                        
-                    # Wait for any task to complete
-                    done, running = await asyncio.wait(
-                        running,
-                        return_when=asyncio.FIRST_COMPLETED
-                    )
-                    
-                    # Check results
-                    for task in done:
-                        if not task.result():
-                            return False
-                            
-            return True
-
-    def schedule_task(
-        self,
-        task: Task,
-        schedule: str,
-        max_retries: int = 3
-    ) -> None:
-        """Schedule task execution
-        
-        Args:
-            task: Task to schedule
-            schedule: Cron-style schedule
-            max_retries: Maximum retry attempts
-        """
-        self.scheduler.schedule_task(task, schedule, max_retries)
-        detailed_logger.info(
-            f"Scheduled task: {task.name} ({task.task_id}) with schedule: {schedule}"
-        )
-
-    def cancel_schedule(self, task_id: str) -> None:
-        """Cancel task schedule
+    def add_task_dependency(self,
+                          task_id: str,
+                          dependency_id: str,
+                          dep_type: DependencyType = DependencyType.HARD) -> None:
+        """Add task dependency
         
         Args:
             task_id: Task ID
+            dependency_id: Dependency task ID
+            dep_type: Dependency type
         """
-        self.scheduler.cancel_schedule(task_id)
-        detailed_logger.info(f"Cancelled schedule for task: {task_id}")
-
-    @log_exception
-    def add_task(self, task: Task) -> None:
-        """Add task
+        self.dependency.add_dependency(task_id, dependency_id, dep_type)
+        
+    def remove_task_dependency(self, task_id: str, dependency_id: str) -> None:
+        """Remove task dependency
         
         Args:
-            task: Task instance
+            task_id: Task ID
+            dependency_id: Dependency task ID
         """
-        if task.task_id in self.tasks:
-            raise TaskError(f"Task ID already exists: {task.task_id}")
+        self.dependency.remove_dependency(task_id, dependency_id)
+        
+    def get_task_dependencies(self, task_id: str) -> List[str]:
+        """Get task dependencies
+        
+        Args:
+            task_id: Task ID
             
-        self.tasks[task.task_id] = task
-        self.task_queue.append(task)
-        self._sort_queue()
+        Returns:
+            List[str]: List of dependency task IDs
+        """
+        return self.dependency.get_dependencies(task_id)
         
-        # Create task rule
-        self.rule_manager.create_rule(task)
+    def get_dependent_tasks(self, task_id: str) -> List[str]:
+        """Get tasks that depend on this task
         
-        # Add task monitoring callbacks
-        task.on_complete(self._on_task_complete)
-        task.on_fail(self._on_task_fail)
-        task.on_progress(self._on_task_progress)
+        Args:
+            task_id: Task ID
+            
+        Returns:
+            List[str]: List of dependent task IDs
+        """
+        return self.dependency.get_dependent_tasks(task_id)
         
-        detailed_logger.info(f"Added task: {task.name} ({task.task_id})")
+    def get_critical_path(self, task_id: str) -> Optional[List[str]]:
+        """Get critical dependency path
+        
+        Args:
+            task_id: Task ID
+            
+        Returns:
+            Optional[List[str]]: Critical path or None if no dependencies
+        """
+        return self.dependency.get_critical_path(task_id)
+        
+    def _check_dependencies(self, task: Task) -> bool:
+        """Check if task dependencies are satisfied
+        
+        Args:
+            task: Task to check
+            
+        Returns:
+            bool: True if dependencies satisfied
+        """
+        return self.dependency.are_dependencies_satisfied(task.task_id)
 
     def _on_task_complete(self, task: Task) -> None:
         """Task completion callback
@@ -599,10 +664,7 @@ class TaskManager:
         """
         for task in self.task_queue:
             # Check if dependencies met
-            dependencies_met = all(
-                self.get_task(dep_id) in self.completed_tasks
-                for dep_id in task.dependencies
-            )
+            dependencies_met = self._check_dependencies(task)
             
             # Check if task rule satisfied
             rule = self.rule_manager.get_rule(task.task_id)

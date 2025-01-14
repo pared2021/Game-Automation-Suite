@@ -1,175 +1,237 @@
-"""资源管理器实现"""
+"""资源管理器"""
 
-from typing import Dict, Type, Any, Optional
-from datetime import datetime
-from .base import ResourceBase, ResourceState, ResourceType
-from .loader import ResourceLoader
+import os
+import logging
+from pathlib import Path
+from typing import Dict, Any, Optional, Type, TypeVar, Generic
+
 from .cache import CacheManager
-from .monitor import MonitorManager
 from .errors import (
-    ResourceNotFoundError,
+    ResourceError,
     ResourceLoadError,
-    ResourceStateError
+    ResourceUnloadError,
+    ResourceVerifyError,
+    ResourceNotFoundError,
+    ResourceAlreadyExistsError,
+    ResourceInvalidError,
+    ResourceBusyError
 )
+from .types.base import BaseResource
+from .loaders.base import BaseLoader
+
+logger = logging.getLogger(__name__)
+T = TypeVar('T', bound=BaseResource)
 
 
-class ResourceManager:
+class ResourceManager(Generic[T]):
     """资源管理器
     
-    负责资源的生命周期管理，包括：
-    - 资源注册和查找
-    - 资源加载和释放
-    - 资源缓存管理
-    - 资源使用监控
+    特性：
+    - 资源加载和卸载
+    - 资源缓存
+    - 资源验证
+    - 错误处理
     """
     
     def __init__(
         self,
-        loader: ResourceLoader,
-        cache_manager: Optional[CacheManager] = None,
-        monitor_manager: Optional[MonitorManager] = None
+        base_path: str,
+        loader: Type[BaseLoader],
+        cache_dir: Optional[str] = None,
+        **kwargs
     ):
         """初始化资源管理器
         
         Args:
-            loader: 资源加载器
-            cache_manager: 缓存管理器
-            monitor_manager: 监控管理器
+            base_path: 基础路径
+            loader: 加载器类型
+            cache_dir: 缓存目录
+            **kwargs: 其他参数
         """
-        self._loader = loader
-        self._cache_manager = cache_manager or CacheManager()
-        self._monitor_manager = monitor_manager or MonitorManager()
-        self._resources: Dict[str, ResourceBase] = {}
+        self._base_path = Path(base_path)
+        self._loader = loader(base_path, **kwargs)
+        self._resources: Dict[str, T] = {}
         
-    async def get_resource(
+        # 创建缓存管理器
+        if cache_dir:
+            self._cache = CacheManager(cache_dir)
+        else:
+            self._cache = None
+            
+    @property
+    def base_path(self) -> Path:
+        """获取基础路径"""
+        return self._base_path
+        
+    @property
+    def loader(self) -> BaseLoader:
+        """获取加载器"""
+        return self._loader
+        
+    @property
+    def resources(self) -> Dict[str, T]:
+        """获取资源字典"""
+        return self._resources
+        
+    async def load(
         self,
         key: str,
-        resource_type: Type[ResourceBase],
-        **kwargs: Any
-    ) -> ResourceBase:
-        """获取资源
-        
-        如果资源不存在，则加载资源。
-        如果资源存在但未加载，则加载资源。
+        resource_type: Type[T],
+        path: Optional[str] = None,
+        use_cache: bool = True,
+        **kwargs
+    ) -> T:
+        """加载资源
         
         Args:
-            key: 资源标识符
+            key: 资源键
             resource_type: 资源类型
-            **kwargs: 加载参数
+            path: 资源路径
+            use_cache: 是否使用缓存
+            **kwargs: 其他参数
             
         Returns:
             资源对象
-            
-        Raises:
-            ResourceNotFoundError: 资源未找到
-            ResourceLoadError: 资源加载失败
-            ResourceStateError: 资源状态错误
         """
-        # 1. 检查资源是否存在
-        if key not in self._resources:
-            # 2. 尝试从缓存加载
-            cached_resource = await self._cache_manager.get(key)
-            if cached_resource is not None and isinstance(cached_resource, resource_type):
-                self._resources[key] = cached_resource
-            else:
-                # 3. 加载新资源
-                try:
-                    resource = await self._loader.load(key, resource_type, **kwargs)
-                    self._resources[key] = resource
-                    await self._cache_manager.put(key, resource)
-                except Exception as e:
-                    raise ResourceLoadError(key, cause=e)
-                
-        resource = self._resources[key]
-        
-        # 4. 检查资源类型
-        if not isinstance(resource, resource_type):
-            raise ResourceStateError(
+        # 检查资源是否已存在
+        if key in self._resources:
+            raise ResourceAlreadyExistsError(key)
+            
+        try:
+            # 尝试从缓存加载
+            if use_cache and self._cache:
+                cache_key = self._get_cache_key(key, path)
+                data = self._cache.get(cache_key)
+                if data is not None:
+                    kwargs['data'] = data
+                    
+            # 加载资源
+            resource = await self._loader.load(
                 key,
-                str(type(resource)),
-                str(resource_type),
-                f"Resource type mismatch: expected {resource_type}, got {type(resource)}"
+                resource_type,
+                path,
+                **kwargs
             )
             
-        # 5. 加载资源（如果未加载）
-        if resource.state == ResourceState.UNLOADED:
-            try:
-                await resource.load()
-            except Exception as e:
-                raise ResourceLoadError(key, cause=e)
+            # 验证资源
+            if not await resource.verify():
+                raise ResourceInvalidError(
+                    f"Resource {key} failed verification"
+                )
                 
-        # 6. 更新引用计数和监控信息
-        resource.increment_ref()
-        await self._monitor_manager.record_usage(resource)
-        
-        return resource
-        
-    async def release_resource(self, key: str) -> None:
-        """释放资源
-        
-        减少资源的引用计数。当引用计数为 0 时，释放资源。
+            # 添加到资源字典
+            self._resources[key] = resource
+            
+            # 添加到缓存
+            if use_cache and self._cache:
+                self._cache.put(cache_key, resource.data)
+                
+            return resource
+            
+        except Exception as e:
+            logger.error(f"Failed to load resource {key}: {e}")
+            if isinstance(e, ResourceError):
+                raise
+            raise ResourceLoadError(str(e))
+            
+    async def unload(self, key: str) -> None:
+        """卸载资源
         
         Args:
-            key: 资源标识符
-            
-        Raises:
-            ResourceNotFoundError: 资源未找到
-            ResourceStateError: 资源状态错误
+            key: 资源键
         """
+        # 检查资源是否存在
         if key not in self._resources:
             raise ResourceNotFoundError(key)
             
-        resource = self._resources[key]
-        ref_count = resource.decrement_ref()
-        
-        # 更新监控信息
-        await self._monitor_manager.record_usage(resource)
-        
-        # 如果引用计数为 0，释放资源
-        if ref_count == 0:
-            try:
-                await resource.unload()
-            except Exception as e:
-                raise ResourceStateError(
-                    key,
-                    str(resource.state),
-                    str(ResourceState.UNLOADED),
-                    cause=e
-                )
-                
-    async def cleanup(self, max_age: float = 3600.0) -> None:
-        """清理旧资源
+        try:
+            # 卸载资源
+            resource = self._resources[key]
+            await self._loader.unload(resource)
+            
+            # 从资源字典中移除
+            del self._resources[key]
+            
+        except Exception as e:
+            logger.error(f"Failed to unload resource {key}: {e}")
+            if isinstance(e, ResourceError):
+                raise
+            raise ResourceUnloadError(str(e))
+            
+    async def reload(self, key: str) -> T:
+        """重新加载资源
         
         Args:
-            max_age: 最大资源年龄（秒）
-        """
-        # 检查资源泄漏
-        leaks = await self._monitor_manager.check_leaks()
-        for leak in leaks:
-            try:
-                await self.release_resource(leak.key)
-            except Exception:
-                pass  # 忽略清理错误
-                
-        # 清理缓存
-        # TODO: 实现缓存清理策略
-        
-    async def get_stats(self) -> Dict[str, Any]:
-        """获取资源统计信息
-        
+            key: 资源键
+            
         Returns:
-            统计信息字典
+            资源对象
         """
-        metrics = await self._monitor_manager.get_metrics()
-        return {
-            'total_resources': len(self._resources),
-            'loaded_resources': sum(
-                1 for r in self._resources.values()
-                if r.state == ResourceState.LOADED
-            ),
-            'error_resources': sum(
-                1 for r in self._resources.values()
-                if r.state == ResourceState.ERROR
-            ),
-            **metrics
-        }
+        # 检查资源是否存在
+        if key not in self._resources:
+            raise ResourceNotFoundError(key)
+            
+        # 获取资源信息
+        resource = self._resources[key]
+        resource_type = type(resource)
+        path = str(resource.path)
+        kwargs = resource.kwargs
+        
+        # 卸载资源
+        await self.unload(key)
+        
+        # 重新加载资源
+        return await self.load(
+            key,
+            resource_type,
+            path,
+            **kwargs
+        )
+        
+    async def verify(self, key: str) -> bool:
+        """验证资源
+        
+        Args:
+            key: 资源键
+            
+        Returns:
+            验证是否通过
+        """
+        # 检查资源是否存在
+        if key not in self._resources:
+            raise ResourceNotFoundError(key)
+            
+        try:
+            # 验证资源
+            resource = self._resources[key]
+            return await resource.verify()
+            
+        except Exception as e:
+            logger.error(f"Failed to verify resource {key}: {e}")
+            if isinstance(e, ResourceError):
+                raise
+            raise ResourceVerifyError(str(e))
+            
+    def clear(self) -> None:
+        """清除所有资源"""
+        for key in list(self._resources.keys()):
+            try:
+                self.unload(key)
+            except Exception as e:
+                logger.error(f"Failed to unload resource {key}: {e}")
+                
+        self._resources.clear()
+        
+    def _get_cache_key(self, key: str, path: Optional[str] = None) -> str:
+        """获取缓存键
+        
+        Args:
+            key: 资源键
+            path: 资源路径
+            
+        Returns:
+            缓存键
+        """
+        if path is None:
+            path = key
+        return f"{key}:{path}"
